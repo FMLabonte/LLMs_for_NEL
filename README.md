@@ -3,7 +3,7 @@ Example usage of the custom data loader this allows you to load all 3 datasets t
 from pubtator_parser import parse_pubtator, save_dataframes, load_dataframes, enrich_relations
 
 # Parse — now returns 3 DataFrames
-meta, anns, rels = parse_pubtator("Data/CDR_Data/CDR.Corpus.v010516/CDR_TestSet.BioC.xml")
+meta, anns, rels = parse_pubtator("Data/CDR_Data/CDR.Corpus.v010516/CDR_TestSet.PubTator.txt")
 
 # Join annotations with metadata
 combined = anns.merge(meta, on="pmid")
