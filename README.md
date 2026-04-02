@@ -1,5 +1,5 @@
 Example usage of the custom data loader this allows you to load all 3 datasets that we are interested in uniformely. Making it easier to work with down the line
-
+```python
 from pubtator_parser import parse_pubtator, save_dataframes, load_dataframes, enrich_relations
 
 # Parse — now returns 3 DataFrames
@@ -19,3 +19,4 @@ save_dataframes(meta, anns, rels, prefix="CDR_test", output_dir="output/")
 
 # Load returns 3 DataFrames metadata(abstract and PID), Annotations, Relations 
 meta, anns, rels = load_dataframes(prefix="CDR_test", input_dir="output/")
+``` 
