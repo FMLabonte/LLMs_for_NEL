@@ -1,3 +1,7 @@
+Example to run the demo.:
+
+`python3 pubtator_parser.py Data/BioRED/Dev.PubTator `
+
 Example usage of the custom data loader this allows you to load all 3 datasets that we are interested in uniformely. Making it easier to work with down the line
 ```python
 from pubtator_parser import parse_pubtator, save_dataframes, load_dataframes, enrich_relations
