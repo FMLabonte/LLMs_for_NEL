@@ -4,6 +4,18 @@ We want to train Relation Extraction (RE) models for biomedical texts, which is 
 ### The Solution
 We need a way to verify this synthetic data. Luckily, we have around 500 annotated abstracts that we can treat as a gold standard. Using these, we can switch annotations and text, treating the annotated abstract as if it were the generation of a model. We can then introduce perturbations in the annotations to introduce errors in a controlled way—for example, flipping a label from negative to positive. We can then train a small model to identify those errors by providing the text and the expected label, turning this into a binary classification task.
 Producing synthetic data is cheap, and with an effective filter, we can ensure data quality.
+### overall workflow
+BioRED data -> Introduce errors -> train model to detect them -> use filter on synthetic data -> does it improve perfromance ?
+
+
+### Research question(s)
+The main research questions of this project and its follow-up work are:
+- Does filtering synthetic data improve model training?
+- How large/diverse must the set of seed abstracts be to construct good filters?
+- What errors are the hardest to spot?
+- Which model architectures are most effective for this task ? 
+
+
 
 #### Example 
 We observe that under hypoxia a downregulation of VEGFA increases the actovation level of the SRY gene. -> From this we can take that VEGFA is negatively correlated SRY since its deactivation leads to an increase of the other. expressed as an annotation VEGFA negative_correlation SRY 
