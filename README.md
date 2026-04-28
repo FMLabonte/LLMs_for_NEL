@@ -7,16 +7,18 @@ Producing synthetic data is cheap, and with an effective filter, we can ensure d
 
 #### Example 
 We observe that under hypoxia a downregulation of VEGFA increases the actovation level of the SRY gene. -> From this we can take that VEGFA is negatively correlated SRY since its deactivation leads to an increase of the other. expressed as an annotation VEGFA negative_correlation SRY 
-
+##### Step 1
 Now we can treat this annotation and text pair as input and output in put being Relation: [VEGFA negative_correlation SRY] and our theoretical synthetic data creation model would have written out: text: [We observe that under hypoxia a downregulation of VEGFA increases the actovation level of the SRY gene.] <- this reversed pair is our gold sample
 
-Relation: [VEGFA negative_correlation SRY] Text: [We observe that under hypoxia a downregulation of VEGFA increases the actovation level of the SRY gene.] Label: [true] 
+##### Example Gold Sample: Relation: [VEGFA negative_correlation SRY] Text: [We observe that under hypoxia a downregulation of VEGFA increases the actovation level of the SRY gene.] Label: [true]
 
+##### Step 2
 We want to see if we can train a model that would spot a missmatch between input relation pair and output Sentence. changing sentences is an controlable manner is hard, Changing annotations is not. 
 VEGFA negative_correlation SRY can be changed to VEGFA positive_correlation SRY. Now the model is given this and the input text, with the quetion is this tripplet correctly represented by the text ?
 
-Relation: [VEGFA positive_correlation SRY] Text: [We observe that under hypoxia a downregulation of VEGFA increases the actovation level of the SRY gene.] Label: [wrong] 
+##### Example introduced error: Relation: [VEGFA positive_correlation SRY] Text: [We observe that under hypoxia a downregulation of VEGFA increases the actovation level of the SRY gene.] Label: [wrong]
 
+##### Step 3
 Using this we can create different errors: 
 Swapping labels, Connecting enteties that arent connected, Connecting enteties with enteties that are not in the text etc. and figure out which of those the models can spot and how accurately.
 
