@@ -370,3 +370,7 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/python,pycharm+all,visualstudiocode,git,macos,linux,windows
+
+# Project-specific
+output/
+
