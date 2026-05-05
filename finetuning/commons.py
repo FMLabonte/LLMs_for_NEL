@@ -11,6 +11,7 @@ from datasets import Dataset
 from sklearn.model_selection import train_test_split
 from transformers import AutoTokenizer
 
+from code.perturbations import build_training_samples, samples_to_rels_like_df
 from pubtator_parser import parse_pubtator
 
 
@@ -74,6 +75,11 @@ def prepare_data(
     id2label: dict[int, str] = {0: "false", 1: "true"}
 
     meta_df, anns_df, rels_df = parse_pubtator(pubtator_file)
+
+    samples = build_training_samples(meta_df, anns_df, rels_df)
+
+    rels_df = samples_to_rels_like_df(samples)
+
     merged_df = meta_df.merge(rels_df, on="pmid")
     df = transform_dataset(merged_df, template)
     df["label"] = df["label"].map(label2id)
