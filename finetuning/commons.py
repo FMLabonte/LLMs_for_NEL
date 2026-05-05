@@ -11,7 +11,7 @@ from datasets import Dataset
 from sklearn.model_selection import train_test_split
 from transformers import AutoTokenizer
 
-from code.perturbations import build_training_samples, samples_to_rels_like_df
+from dataset_preparation.perturbations import build_training_samples, samples_to_rels_like_df
 from pubtator_parser import parse_pubtator
 
 
