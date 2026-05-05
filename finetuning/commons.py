@@ -73,8 +73,8 @@ def prepare_data(
     label2id: dict[str, int] = {"false": 0, "true": 1}
     id2label: dict[int, str] = {0: "false", 1: "true"}
 
-    metadata_df, _, relations_df = parse_pubtator(pubtator_file)
-    merged_df = metadata_df.merge(relations_df, on="pmid")
+    meta_df, anns_df, rels_df = parse_pubtator(pubtator_file)
+    merged_df = meta_df.merge(rels_df, on="pmid")
     df = transform_dataset(merged_df, template)
     df["label"] = df["label"].map(label2id)
 
