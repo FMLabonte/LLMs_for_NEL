@@ -74,7 +74,7 @@ class TrainingSample:
         record["id_1"] = self.entity_a_id
         record["id_2"] = self.entity_b_id
         record["perturbation"] = self.perturbation
-        record["is_gold"] = True if self.perturbation == "gold" else False
+        record["label"] = self.label
 
         return record
 
