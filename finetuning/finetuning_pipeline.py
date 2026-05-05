@@ -7,7 +7,8 @@ import numpy as np
 from sklearn.metrics import accuracy_score, f1_score
 from transformers import AutoModelForSequenceClassification, Trainer, TrainingArguments
 
-from eval_finetuning_pipeline import PipelineData, evaluate_finetuning, prepare_data
+from eval_finetuning_pipeline import evaluate_finetuning
+from finetuning.commons import PipelineData, prepare_data
 
 MODEL_NAME = "bioformers/bioformer-8L"
 PUBTATOR_FILE = Path("/Users/chris/git/LLMs_for_NEL/Data/BioRED/Dev.PubTator")
