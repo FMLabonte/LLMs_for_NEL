@@ -388,8 +388,11 @@ def build_training_samples(
             )
             if picked is not None:
                 fp_b_id, fp_b_info = picked
-                fake_rel = rng.choice(BIORED_RELATION_TYPES)
-                samples.append(_make(pmid, a_id, info_a, fake_rel,
+                # Keep the gold's relation type so this perturbation isolates
+                # the wrong-entity_B signal. Otherwise it overlaps with label_flip
+                # (the model could detect fp_* via the random relation type rather
+                # than via the entity swap).
+                samples.append(_make(pmid, a_id, info_a, rel_type,
                                      fp_b_id, fp_b_info, 0, f"fp_{sub}"))
 
         # ----- false negative -----

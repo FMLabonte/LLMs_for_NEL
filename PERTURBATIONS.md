@@ -33,6 +33,7 @@ We track macro-F1 per `perturbation` value so this hypothesis is testable from t
 
 - Direction swap is **skipped on symmetric relations** (`Association`, `Comparison`). Applying it would create a sample we label wrong but is semantically still correct.
 - False-positive sampling is **type-restricted by default**: only `(entity_type_a, entity_type_b)` pairs that appear in real BioRED relations are eligible. This avoids implausible Species/CellLine pairings the model would learn to reject trivially. `--no-type-restrict` disables.
+- **`fp_*` perturbations keep the gold relation's `relation_type`.** Only `entity_B` is replaced. We deliberately do *not* randomize the relation type for fp samples, because that would overlap with `label_flip` (the model could then detect fp via the wrong-relation signal rather than via the entity swap). Keeping the gold relation type isolates the wrong-`entity_B` signal cleanly, so per-type F1 actually measures what we claim.
 - Each gold relation produces at most one sample of each perturbation type. To average out random choices (which entity got swapped, which alt-label was picked), generate **N variants per gold per type** (default N=5; CLI: `--variants N`).
 
 ## Class-imbalance versions
