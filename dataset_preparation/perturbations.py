@@ -67,6 +67,17 @@ class TrainingSample:
     def to_dict(self) -> dict:
         return asdict(self)
 
+    def to_pandas_record(self):
+        record = {}
+        record["pmid"] = self.pmid
+        record["relation_type"] = self.relation_type
+        record["id_1"] = self.entity_a_id
+        record["id_2"] = self.entity_b_id
+        record["perturbation"] = self.perturbation
+        record["label"] = self.label
+
+        return record
+
 
 def _build_entity_lookup(
     anns: pd.DataFrame,
@@ -291,6 +302,12 @@ def build_training_samples(
                              b_id, info_b, 0, "false_negative"))
 
     return samples
+
+
+def samples_to_rels_like_df(samples: list[TrainingSample]) -> pd.DataFrame:
+    """Convert a list of TrainingSamples to DataFrame similar to 'rels' DF"""
+    records = [sample.to_pandas_record() for sample in samples]
+    return pd.DataFrame(records)
 
 
 # ---------------------------------------------------------------------------
