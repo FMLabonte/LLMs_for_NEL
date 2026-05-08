@@ -73,7 +73,7 @@ If you only need the data-pipeline parts and not the model training, `pip instal
 
 ```bash
 conda activate cpu-only
-cd code/
+cd dataset_preparation/
 python cli.py inspect          # raw BioRED stats (papers, entities, relations)
 python cli.py build            # generate perturbed CSVs in ../output/
 python cli.py stats            # per-perturbation breakdown of the CSVs
@@ -82,7 +82,7 @@ python cli.py peek -n 3        # eyeball a few sample rows
 
 ## Phase 1 CLI
 
-Single entry point at [code/cli.py](code/cli.py). Run `python cli.py --help` for the full list. Built with [Typer](https://typer.tiangolo.com/), so every command and flag is type-validated.
+Single entry point at [dataset_preparation/cli.py](dataset_preparation/cli.py). Run `python cli.py --help` for the full list. Built with [Typer](https://typer.tiangolo.com/), so every command and flag is type-validated.
 
 ### Commands
 
@@ -124,7 +124,7 @@ The 4 perturbation types you can filter on:
 
 ### How to add new commands
 
-The CLI is a single file, [code/cli.py](code/cli.py). To add a new subcommand, follow the same pattern as the existing five.
+The CLI is a single file, [dataset_preparation/cli.py](dataset_preparation/cli.py). To add a new subcommand, follow the same pattern as the existing five.
 
 **Steps:**
 
@@ -178,10 +178,11 @@ LLMs_for_NEL/
 │   ├── BioRED/                      ← main dataset (Train/Dev/Test in PubTator + JSON + XML)
 │   ├── CDR_Data/                    ← Chemical-Disease RE (older baseline)
 │   └── MedMention/                  ← entity mentions only (reference)
-├── code/
+├── dataset_preparation/
+│   ├── __init__.py
 │   ├── cli.py                       ← Typer entry point (see above)
 │   ├── data_loader.py               ← BioRED loader (wraps pubtator_parser)
-│   ├── perturbations.py             ← TrainingSample dataclass + 4 perturbation generators
+│   ├── perturbations.py             ← TrainingSample dataclass + perturbation generators
 │   └── build_dataset.py             ← library: build_split, assert_known_relation_types
 └── output/                          ← generated CSVs (gitignored)
 ```
