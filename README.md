@@ -15,6 +15,7 @@ A binary classifier that filters LLM-generated synthetic biomedical training dat
   - [Commands](#commands)
   - [Examples](#examples)
   - [How to add new commands](#how-to-add-new-commands)
+- [Perturbation taxonomy](#perturbation-taxonomy)
 - [Repository structure](#repository-structure)
 - [Direct parser usage (without the CLI)](#example-to-run-the-demo)
 
@@ -112,19 +113,21 @@ python cli.py peek dev -n 5 -p direction_swap
 python cli.py peek train -p gold -l 1
 ```
 
-The 4 perturbation types you can filter on:
+The perturbation types you can filter on (see [PERTURBATIONS.md](PERTURBATIONS.md) for full definitions and worked examples):
 
 | Perturbation | Label | What changes |
 |---|---|---|
 | `gold` | 1 | unchanged BioRED relation |
 | `label_flip` | 0 | relation type changed to a different one |
 | `direction_swap` | 0 | entity_A and entity_B swapped (skipped for symmetric relations: `Association`, `Comparison`) |
-| `false_positive` | 0 | invented a relation between two co-mentioned, currently-unrelated entities |
+| `fp_co_related` | 0 | entity_B replaced with another in-abstract entity that has its own relation elsewhere |
+| `fp_co_standalone` | 0 | entity_B replaced with an in-abstract entity that has no relations |
+| `fp_external` | 0 | entity_B replaced with an entity not in the abstract |
 | `false_negative` | 0 | claimed `NoRelation` for a relation that actually exists |
 
 ### How to add new commands
 
-The CLI is a single file, [dataset_preparation/cli.py](dataset_preparation/cli.py). To add a new subcommand, follow the same pattern as the existing five.
+The CLI is a single file, [dataset_preparation/cli.py](dataset_preparation/cli.py). To add a new subcommand, follow the same pattern as the existing ones.
 
 **Steps:**
 
@@ -167,11 +170,20 @@ After saving, `python cli.py --help` lists the new command automatically. Run `p
 - Default to `Split.all` for stat-style commands (inspect, stats, validate), and `Split.train` for sampling commands (peek).
 - Every command must have a one-line docstring; that's the description shown in the top-level `--help`.
 
+## Perturbation taxonomy
+
+The canonical list of perturbation types, with stable names and the LLM error each one targets, lives in [PERTURBATIONS.md](PERTURBATIONS.md). A typeset PDF version of the same content is at [docs/perturbations.pdf](docs/perturbations.pdf) (built from [docs/perturbations.tex](docs/perturbations.tex) with `pdflatex`).
+
+Treat the names listed there (`gold`, `label_flip`, `direction_swap`, `fp_co_related`, `fp_co_standalone`, `fp_external`, `false_negative`) as the stable vocabulary used in CSV columns, metric slices, and reports.
+
 ## Repository structure
 
 ```
 LLMs_for_NEL/
 ├── README.md                        ← you are here
+├── PERTURBATIONS.md                 ← canonical perturbation taxonomy (markdown)
+├── docs/perturbations.tex           ← same taxonomy, LaTeX source
+├── docs/perturbations.pdf           ← same taxonomy, typeset PDF (with worked examples)
 ├── cpu-env.yml                      ← conda environment spec
 ├── pubtator_parser.py               ← raw PubTator -> 3 DataFrames (meta, anns, rels)
 ├── Data/
@@ -182,7 +194,7 @@ LLMs_for_NEL/
 │   ├── __init__.py
 │   ├── cli.py                       ← Typer entry point (see above)
 │   ├── data_loader.py               ← BioRED loader (wraps pubtator_parser)
-│   ├── perturbations.py             ← TrainingSample dataclass + perturbation generators
+│   ├── perturbations.py             ← TrainingSample + 7 perturbation labels (see PERTURBATIONS.md)
 │   └── build_dataset.py             ← library: build_split, assert_known_relation_types
 └── output/                          ← generated CSVs (gitignored)
 ```

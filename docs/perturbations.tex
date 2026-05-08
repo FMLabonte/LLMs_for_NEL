@@ -1,0 +1,164 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{titlesec}
+
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue, citecolor=blue}
+\setlist[itemize]{leftmargin=1.5em}
+\titlespacing*{\section}{0pt}{1.4em}{0.4em}
+\titlespacing*{\subsection}{0pt}{1em}{0.3em}
+
+\newcommand{\code}[1]{\texttt{#1}}
+
+\title{Perturbation Taxonomy\\[0.3em]
+\large \texttt{LLMs\_for\_NEL}: Synthetic Data Quality Control for Biomedical RE}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+\vspace{-3em}
+
+\noindent
+Canonical list of perturbation types we apply to BioRED gold relations to produce training data for the quality-filter classifier. The names below are the exact strings used in the \code{perturbation} column of every built CSV; treat them as a stable vocabulary.
+
+\section*{How to read the table}
+
+\begin{itemize}
+\item \textbf{Family} groups perturbations that share a mechanism. Useful when slicing metrics later.
+\item \textbf{Mutates} says what part of the gold tuple \code{(entity\_A, relation\_type, entity\_B)} is replaced.
+\item \textbf{Why} is the LLM error mode we hope this perturbation teaches the filter to catch.
+\item \textbf{Label} is the binary classifier target. \code{1} for the unmodified gold, \code{0} for everything else.
+\end{itemize}
+
+\section*{Catalog}
+
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\textwidth}{@{}l l X X c@{}}
+\toprule
+\textbf{Name} & \textbf{Family} & \textbf{Mutates} & \textbf{Why} & \textbf{Label} \\
+\midrule
+\code{gold} & positive & nothing & establishes the positive class & 1 \\
+\code{label\_flip} & label & relation type, swapped to a different one (uniform random over the 7 alternatives) & LLM picks the wrong relation type from a plausible menu & 0 \\
+\code{direction\_swap} & direction & swap \code{entity\_A} and \code{entity\_B}, keep relation type & LLM reverses causality (gene treats disease vs.\ disease causes gene) & 0 \\
+\code{fp\_co\_related} & false pos. & replace \code{entity\_B} with another entity that is in the abstract AND has its own annotated relation (just not with \code{entity\_A}) & hardest false-positive case: both entities are independently real in the text, the model has to decide \emph{this specific pairing} is fabricated & 0 \\
+\code{fp\_co\_standalone} & false pos. & replace \code{entity\_B} with an entity that is in the abstract but has no annotated relation & medium false-positive: the entity is co-mentioned but bears no real relation in the abstract & 0 \\
+\code{fp\_external} & false pos. & replace \code{entity\_B} with an entity that is not in the abstract at all (drawn from the corpus pool) & easiest false-positive: detectable from text presence alone, weak baseline & 0 \\
+\code{false\_negative} & removal & replace the relation label with \code{NoRelation} for a triple that does have a real relation & LLM drops a real relation it should have kept & 0 \\
+\bottomrule
+\end{tabularx}
+
+\section*{Worked examples}
+
+All examples below use the same paper, PMID~10491763 (first paper in BioRED Train). Title: \emph{``Hepatocyte nuclear factor-6: associations between genetic variability and type II diabetes and between genetic variability and estimates of insulin secretion.''} The relevant excerpt is:
+
+\begin{quote}
+\small
+``\dots we tested the hypothesis that variability in the HNF-6 gene is associated with subsets of Type II (non-insulin-dependent) diabetes mellitus and estimates of insulin secretion in glucose tolerant subjects \dots Mutations in the coding region of the HNF-6 gene are not associated with Type II diabetes or with changes in insulin responses to glucose \dots''
+\end{quote}
+
+\noindent
+The gold annotations for this paper include:
+\begin{itemize}
+\item \code{(HNF-6, Association, type II diabetes)}
+\item \code{(glucose, Positive\_Correlation, insulin)}
+\item \code{(glucose, Association, type II diabetes)}
+\end{itemize}
+
+\noindent
+\textbf{Mentioned entities also include:} \code{Pro75Ala} (SequenceVariant), \code{patients} (OrganismTaxon), \code{MODY} (Gene). None of these have annotated relations in this abstract.
+
+\subsection*{\code{gold}}
+Triple: \code{(glucose, Positive\_Correlation, insulin)} \hfill Label: \code{1}\\
+Supported by ``\emph{insulin secretion in glucose tolerant subjects}.''
+
+\subsection*{\code{label\_flip}}
+Triple: \code{(glucose, \textbf{Negative\_Correlation}, insulin)} \hfill Label: \code{0}\\
+The abstract describes glucose-driven insulin secretion (positive). Claiming negative correlation contradicts that.
+
+\subsection*{\code{direction\_swap}}
+Triple: \code{(\textbf{insulin}, Positive\_Correlation, \textbf{glucose})} \hfill Label: \code{0}\\
+The gold direction is glucose~$\to$~insulin (glucose level drives insulin). Swapped, the claim reads ``insulin drives glucose,'' which the abstract does not say.
+
+\subsection*{\code{fp\_co\_related}}
+Triple: \code{(insulin, Association, HNF-6)} \hfill Label: \code{0}\\
+Both \code{insulin} and \code{HNF-6} are highlighted entities with their own real relations elsewhere in this abstract (glucose--insulin, HNF-6--diabetes), but no relation between them is annotated. The model has to know that \emph{this specific pairing} is fabricated even though both entities are independently real.
+
+\subsection*{\code{fp\_co\_standalone}}
+Triple: \code{(Pro75Ala, Positive\_Correlation, type II diabetes)} \hfill Label: \code{0}\\
+\code{Pro75Ala} is mentioned in the abstract but the conclusion explicitly states ``\emph{Mutations in the coding region of the HNF-6 gene are not associated with Type II diabetes}.'' No relation involving \code{Pro75Ala} is annotated.
+
+\subsection*{\code{fp\_external}}
+Triple: \code{(L-thyroxine, Negative\_Correlation, type II diabetes)} \hfill Label: \code{0}\\
+\code{L-thyroxine} is not mentioned anywhere in this abstract (it comes from a different paper, PMID 14510914 on hypothyroidism). Detectable purely by string lookup.
+
+\subsection*{\code{false\_negative}}
+Triple: \code{(glucose, NoRelation, insulin)} \hfill Label: \code{0}\\
+The gold says glucose and insulin are positively correlated. Claiming \code{NoRelation} drops that real annotation.
+
+\section*{Expected per-type difficulty (rough, to verify empirically)}
+
+\begin{center}
+\code{label\_flip} $\approx$ \code{direction\_swap} $<$ \code{fp\_external} $<$ \code{fp\_co\_standalone} $<$ \code{fp\_co\_related}
+\end{center}
+
+\noindent
+The intuition: detecting that an entity is missing from the abstract is essentially string lookup. Detecting that two co-mentioned entities are \emph{unrelated} requires real semantic understanding. Frederik flagged this directly in meeting~2: \emph{``swapping this one to something that is in the same abstract should be harder for the model to differentiate than something that isn't even in the abstract.''}
+
+We track macro-F1 per \code{perturbation} value, so this hypothesis is testable from the metrics we already log.
+
+\section*{Sampling and balance rules}
+
+\begin{itemize}
+\item Direction swap is \textbf{skipped on symmetric relations} (\code{Association}, \code{Comparison}). Applying it would create a sample we label wrong but is semantically still correct.
+\item False-positive sampling is \textbf{type-restricted by default}: only \code{(entity\_type\_a, entity\_type\_b)} pairs that appear in real BioRED relations are eligible. This avoids implausible Species/CellLine pairings the model would learn to reject trivially. The CLI flag \code{--no-type-restrict} disables it.
+\item Each gold relation produces at most one sample of each perturbation type. To average out random choices (which entity got swapped, which alt-label was picked), we generate \textbf{$N$ variants per gold per type} (default $N=5$; CLI: \code{--variants N}).
+\end{itemize}
+
+\section*{Class-imbalance versions}
+
+BioRED is dominated by \code{Association}, \code{Negative\_Correlation}, \code{Positive\_Correlation}. The other five relation types (\code{Comparison}, \code{Cotreatment}, \code{Drug\_Interaction}, \code{Bind}, \code{Conversion}) each have under 100 examples in train. We build the dataset in two variants:
+
+\begin{itemize}
+\item \textbf{full:} every relation type included.
+\item \textbf{reduced:} the five rare types are dropped before perturbation.
+\end{itemize}
+
+\noindent
+Train both, compare downstream filter performance.
+
+\section*{Adding \code{NoRelation} as a positive-class entity pair}
+
+\code{NoRelation} is the relation label used by the \code{false\_negative} perturbation. To make \code{NoRelation} a first-class part of the training distribution, so the filter learns that ``no relation'' is a valid ground truth and not just an absence, we also sample co-mentioned entity pairs that have no annotated relation and emit them as \code{gold} with \code{relation\_type = NoRelation}, \code{label = 1}. Without this step, \code{NoRelation} only ever appears with \code{label = 0}, which teaches the model the wrong thing.
+
+This needs conscious balancing: in real BioRED, the count of co-mentioned-but-unrelated pairs is far larger than the count of annotated relations. We cap the per-abstract count to keep \code{NoRelation} from dominating the training set.
+
+\section*{One-thing-at-a-time spin-off datasets}
+
+For the per-type difficulty analysis, we derive a separate spin-off CSV per perturbation type from a master sample pool. Each spin-off must differ from the others in \textbf{exactly one dimension}: the perturbation under test. Specifically:
+
+\begin{itemize}
+\item The set of gold relations covered is the same across spin-offs.
+\item For each gold, the entity selection used in the perturbation (which entity got picked as the swap target, etc.) is reused across spin-offs where applicable.
+\item Random seeds for variant selection are shared per gold.
+\end{itemize}
+
+\noindent
+Without this discipline, observed performance differences between perturbation types are confounded by random noise in entity sampling, not by signal. We end up unable to claim which perturbation is genuinely harder.
+
+\section*{Open design questions}
+
+\begin{itemize}
+\item \textbf{Multi-ID umbrella entities} (e.g.\ \code{MODY}~$\to$~\code{3172,3651,6927}) currently get dropped (about 8\,\% of gold relations). Options: pick first ID, expand to multiple rows, skip the relation entirely. Default for now is skip; revisit before scaling up.
+\item \textbf{Combo perturbations} (e.g.\ \code{label\_flip + direction\_swap} on the same gold) are not in v1. Could be added later as a harder bucket if single-perturbation accuracy saturates.
+\item \textbf{\code{false\_negative} entity-swap variant:} should we also generate false-negatives where \code{entity\_B} is \emph{replaced} (so the negative is about a different pair than the gold)? Current implementation only relabels the existing pair to \code{NoRelation}.
+\end{itemize}
+
+\end{document}
