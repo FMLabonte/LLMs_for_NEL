@@ -124,15 +124,36 @@ We track macro-F1 per \code{perturbation} value, so this hypothesis is testable 
 
 \section*{Class-imbalance versions}
 
-BioRED is dominated by \code{Association}, \code{Negative\_Correlation}, \code{Positive\_Correlation}. The other five relation types (\code{Comparison}, \code{Cotreatment}, \code{Drug\_Interaction}, \code{Bind}, \code{Conversion}) each have under 100 examples in train. We build the dataset in two variants:
+BioRED is dominated by 3 relation types. Per-class counts across the official splits:
 
-\begin{itemize}
-\item \textbf{full:} every relation type included.
-\item \textbf{reduced:} the five rare types are dropped before perturbation.
-\end{itemize}
+\begin{center}
+\begin{tabular}{@{}l r r r@{}}
+\toprule
+\textbf{Relation type} & \textbf{train} & \textbf{dev} & \textbf{test} \\
+\midrule
+\code{Association}          & 2192 (52.5\%) & 560 (48.2\%) & 635 (54.6\%) \\
+\code{Positive\_Correlation} & 1089 (26.1\%) & 352 (30.3\%) & 325 (27.9\%) \\
+\code{Negative\_Correlation} &  763 (18.3\%) & 216 (18.6\%) & 171 (14.7\%) \\
+\code{Bind}                 &   61 (1.5\%)  &  19 (1.6\%)  &   9 (0.8\%)  \\
+\code{Cotreatment}          &   31 (0.7\%)  &  10 (0.9\%)  &  14 (1.2\%)  \\
+\code{Comparison}           &   28 (0.7\%)  &   5 (0.4\%)  &   6 (0.5\%)  \\
+\code{Drug\_Interaction}    &   11 (0.3\%)  & \textbf{0}   &   2 (0.2\%)  \\
+\code{Conversion}           &    3 (0.1\%)  & \textbf{0}   &   1 (0.1\%)  \\
+\bottomrule
+\end{tabular}
+\end{center}
 
 \noindent
-Train both, compare downstream filter performance.
+The top 3 cover about 96--97\,\% of every split. \code{Drug\_Interaction} and \code{Conversion} have \textbf{zero examples in dev}, which means there is no evaluation signal for them no matter how the filter is trained. \code{Bind}, \code{Cotreatment}, \code{Comparison} are borderline at single-digit dev counts.
+
+\medskip
+\noindent
+We therefore build the dataset in two variants:
+
+\begin{itemize}
+\item \textbf{reduced (default):} keep only \code{Association}, \code{Positive\_Correlation}, \code{Negative\_Correlation}. This is what the filter is actually trained and evaluated on.
+\item \textbf{full:} every relation type included. Used as an ablation to confirm that adding the rare classes doesn't help (and that they aren't a stealthy source of label noise).
+\end{itemize}
 
 \section*{Adding \code{NoRelation} as a positive-class entity pair}
 

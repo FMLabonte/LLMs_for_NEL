@@ -37,12 +37,23 @@ We track macro-F1 per `perturbation` value so this hypothesis is testable from t
 
 ## Class-imbalance versions
 
-BioRED is dominated by `Association`, `Negative_Correlation`, `Positive_Correlation`. The other five relation types (`Comparison`, `Cotreatment`, `Drug_Interaction`, `Bind`, `Conversion`) each have under 100 examples in train. We build the dataset in two variants:
+BioRED is dominated by 3 relation types. Per-class counts across the official splits:
 
-- **full:** every relation type included.
-- **reduced:** the five rare types are dropped before perturbation.
+| Relation type | train | dev | test |
+|---|---:|---:|---:|
+| `Association` | 2192 (52.5%) | 560 (48.2%) | 635 (54.6%) |
+| `Positive_Correlation` | 1089 (26.1%) | 352 (30.3%) | 325 (27.9%) |
+| `Negative_Correlation` | 763 (18.3%) | 216 (18.6%) | 171 (14.7%) |
+| `Bind` | 61 (1.5%) | 19 (1.6%) | 9 (0.8%) |
+| `Cotreatment` | 31 (0.7%) | 10 (0.9%) | 14 (1.2%) |
+| `Comparison` | 28 (0.7%) | 5 (0.4%) | 6 (0.5%) |
+| `Drug_Interaction` | 11 (0.3%) | **0** | 2 (0.2%) |
+| `Conversion` | 3 (0.1%) | **0** | 1 (0.1%) |
 
-Train both, compare downstream filter performance.
+The top 3 cover ~96-97% of every split. `Drug_Interaction` and `Conversion` have **zero examples in dev**, which means there is no evaluation signal for them no matter how the filter is trained. `Bind`, `Cotreatment`, `Comparison` are borderline at single-digit dev counts. We therefore build the dataset in two variants:
+
+- **reduced (default):** keep only `Association`, `Positive_Correlation`, `Negative_Correlation`. This is what the filter is actually trained and evaluated on.
+- **full:** every relation type included. Used as an ablation to confirm that adding the rare classes doesn't help (and that they aren't a stealthy source of label noise).
 
 ## Adding `NoRelation` as a positive-class entity pair
 
