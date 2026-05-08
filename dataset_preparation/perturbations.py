@@ -2,15 +2,23 @@
 Phase 1: Perturbation generators for the quality-filter classifier.
 
 Given a gold BioRED relation, produce perturbed variants used as negative
-training examples. Four perturbation types:
+training examples. Seven perturbation labels (one positive, six negative):
 
-  1. label_flip     - swap the relation type for a different one
-  2. direction_swap - swap entity_A and entity_B (only for directional rels)
-  3. false_positive - invent a relation between two co-mentioned, unrelated entities
-  4. false_negative - claim NoRelation for a relation that actually exists
+  gold              - unchanged BioRED relation (positive)
+  label_flip        - swap relation type for a different one
+  direction_swap    - swap entity_A and entity_B (only for directional rels)
+  fp_co_related     - replace entity_B with another in-abstract entity that
+                      has its own annotated relation elsewhere
+  fp_co_standalone  - replace entity_B with another in-abstract entity that
+                      has no annotated relations at all
+  fp_external       - replace entity_B with an entity not in the abstract
+  false_negative    - claim NoRelation for a triple that does have a relation
 
 All perturbations operate on the (entity_pair, relation_label) tuple ONLY.
 The abstract text is never modified.
+
+See PERTURBATIONS.md (root of repo) for the full taxonomy with rationale,
+worked examples, and design decisions.
 """
 
 from __future__ import annotations
@@ -25,9 +33,13 @@ PerturbationType = Literal[
     "gold",
     "label_flip",
     "direction_swap",
-    "false_positive",
+    "fp_co_related",
+    "fp_co_standalone",
+    "fp_external",
     "false_negative",
 ]
+
+FpSubType = Literal["co_related", "co_standalone", "external"]
 
 # Relation types observed in BioRED gold. Keep this list authoritative;
 # build_dataset.py asserts that every observed relation type is in here.
@@ -67,16 +79,20 @@ class TrainingSample:
     def to_dict(self) -> dict:
         return asdict(self)
 
-    def to_pandas_record(self):
-        record = {}
-        record["pmid"] = self.pmid
-        record["relation_type"] = self.relation_type
-        record["id_1"] = self.entity_a_id
-        record["id_2"] = self.entity_b_id
-        record["perturbation"] = self.perturbation
-        record["label"] = self.label
+    def to_pandas_record(self) -> dict:
+        """Flat record matching the 'rels' DataFrame schema (plus label/perturbation).
 
-        return record
+        Drops the abstract text and entity surface text/type. Downstream pipelines
+        join back to the abstract via pmid -> meta lookup.
+        """
+        return {
+            "pmid":          self.pmid,
+            "relation_type": self.relation_type,
+            "id_1":          self.entity_a_id,
+            "id_2":          self.entity_b_id,
+            "perturbation":  self.perturbation,
+            "label":         self.label,
+        }
 
 
 def _build_entity_lookup(
@@ -113,6 +129,18 @@ def _real_pairs_per_paper(
     return out
 
 
+def _entities_with_relations_per_paper(
+    rels: pd.DataFrame,
+) -> dict[str, set[str]]:
+    """For each pmid, the set of entity IDs that participate in at least one
+    annotated relation. Used to distinguish fp_co_related from fp_co_standalone."""
+    out: dict[str, set[str]] = {}
+    for pmid, grp in rels.groupby("pmid"):
+        ids = set(grp["id_1"]).union(set(grp["id_2"]))
+        out[pmid] = ids
+    return out
+
+
 def _plausible_type_pairs(
     rels: pd.DataFrame,
     entity_info: dict[tuple[str, str], dict],
@@ -134,8 +162,23 @@ def _plausible_type_pairs(
     return pairs
 
 
+def _build_corpus_pool(
+    entity_info: dict[tuple[str, str], dict],
+) -> dict[str, dict]:
+    """mesh_id -> {mention, entity_type}, deduped across all abstracts.
+
+    Used as the candidate pool for fp_external sampling (entities drawn from
+    the corpus that are NOT in the current abstract). First occurrence wins.
+    """
+    pool: dict[str, dict] = {}
+    for (_pmid, mesh_id), info in entity_info.items():
+        if mesh_id not in pool:
+            pool[mesh_id] = info
+    return pool
+
+
 # ---------------------------------------------------------------------------
-# Perturbation #1: Label flip
+# Perturbation: Label flip
 # ---------------------------------------------------------------------------
 
 def perturb_label_flip(
@@ -148,7 +191,7 @@ def perturb_label_flip(
 
 
 # ---------------------------------------------------------------------------
-# Perturbation #2: Direction swap
+# Perturbation: Direction swap
 # ---------------------------------------------------------------------------
 
 def direction_swap_is_meaningful(relation_type: str) -> bool:
@@ -157,48 +200,82 @@ def direction_swap_is_meaningful(relation_type: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Perturbation #3: False positive  (invent a relation that doesn't exist)
+# Perturbation: False positive (3 sub-types)
 # ---------------------------------------------------------------------------
 
-def sample_false_positive_pair(
+def sample_fp_entity_b(
     pmid: str,
+    entity_a_id: str,
+    entity_a_info: dict,
     pmid_anns: pd.DataFrame,
     real_pairs: set[tuple[str, str]],
+    entities_with_relations: set[str],
     plausible_type_pairs: set[tuple[str, str]],
+    corpus_pool: dict[str, dict],
     rng: random.Random,
+    sub_type: FpSubType,
     type_restricted: bool = True,
-) -> tuple[str, str, dict, dict] | None:
-    """Pick two co-mentioned entities in `pmid` with NO annotated relation.
+) -> tuple[str, dict] | None:
+    """Pick an entity_B for a false-positive pair, anchored on a fixed entity_A.
 
-    Returns (id_a, id_b, info_a, info_b) or None if no such pair exists.
+    sub_type controls where entity_B is drawn from:
 
-    If `type_restricted=True`, only entity-type pairs that appear somewhere in
-    the gold relations are considered (to avoid implausible Species/CellLine
-    style false positives).
+      co_related    : in this abstract AND has its own annotated relation
+                      elsewhere (just not with entity_A).
+      co_standalone : in this abstract AND has no annotated relations at all.
+      external      : NOT in this abstract; drawn from the corpus pool.
+
+    type_restricted=True (default) further filters to entity-type pairs that
+    actually appear in real BioRED relations, avoiding implausible
+    Species/CellLine combinations LLMs would never plausibly hallucinate.
+
+    Returns (b_id, b_info) or None if no candidate exists.
     """
-    # Unique entities in this paper, with their types
-    ent_rows = (
-        pmid_anns[["mesh_id", "entity_type", "mention"]]
-        .drop_duplicates(subset=["mesh_id"])
-    )
-    ents = ent_rows.to_dict("records")
-    if len(ents) < 2:
-        return None
-
-    candidates: list[tuple[str, str, dict, dict]] = []
-    for i, a in enumerate(ents):
-        for b in ents[i + 1:]:
-            if a["mesh_id"] == b["mesh_id"]:
+    if sub_type == "external":
+        in_abstract_ids = (
+            set(pmid_anns["mesh_id"].unique())
+            if pmid_anns is not None and len(pmid_anns) > 0
+            else set()
+        )
+        candidates: list[tuple[str, dict]] = []
+        for b_id, b_info in corpus_pool.items():
+            if b_id == entity_a_id:
                 continue
-            if (a["mesh_id"], b["mesh_id"]) in real_pairs:
+            if b_id in in_abstract_ids:
                 continue
             if type_restricted and (
-                (a["entity_type"], b["entity_type"]) not in plausible_type_pairs
+                (entity_a_info["entity_type"], b_info["entity_type"])
+                not in plausible_type_pairs
             ):
                 continue
-            info_a = {"mention": a["mention"], "entity_type": a["entity_type"]}
-            info_b = {"mention": b["mention"], "entity_type": b["entity_type"]}
-            candidates.append((a["mesh_id"], b["mesh_id"], info_a, info_b))
+            candidates.append((b_id, b_info))
+    else:
+        # co_related or co_standalone: candidates from this abstract
+        if pmid_anns is None or len(pmid_anns) == 0:
+            return None
+        ent_rows = (
+            pmid_anns[["mesh_id", "entity_type", "mention"]]
+            .drop_duplicates(subset=["mesh_id"])
+        )
+        candidates = []
+        for _, e in ent_rows.iterrows():
+            b_id = e["mesh_id"]
+            if b_id == entity_a_id:
+                continue
+            if (entity_a_id, b_id) in real_pairs:
+                continue  # this pair already has a real relation; not a false positive
+            if type_restricted and (
+                (entity_a_info["entity_type"], e["entity_type"])
+                not in plausible_type_pairs
+            ):
+                continue
+            has_rels = b_id in entities_with_relations
+            if sub_type == "co_related" and not has_rels:
+                continue
+            if sub_type == "co_standalone" and has_rels:
+                continue
+            b_info = {"mention": e["mention"], "entity_type": e["entity_type"]}
+            candidates.append((b_id, b_info))
 
     if not candidates:
         return None
@@ -206,7 +283,7 @@ def sample_false_positive_pair(
 
 
 # ---------------------------------------------------------------------------
-# Perturbation #4: False negative  (claim NoRelation for a real relation)
+# Perturbation: False negative
 # ---------------------------------------------------------------------------
 
 def perturb_false_negative_label() -> str:
@@ -224,13 +301,23 @@ def build_training_samples(
     seed: int = 42,
     type_restricted_false_positives: bool = True,
 ) -> list[TrainingSample]:
-    """Build the full training set: gold + 4 perturbations per gold relation."""
+    """Build the full training set: one gold sample plus the perturbed
+    negatives for each gold relation.
+
+    Per gold, emits up to:
+      1 gold + 1 label_flip + 1 direction_swap (if directional)
+      + 1 fp_co_related + 1 fp_co_standalone + 1 fp_external
+      + 1 false_negative
+    Some sub-types may emit 0 samples if no candidate exists in this abstract.
+    """
     rng = random.Random(seed)
     abstract_by_pmid = dict(zip(meta["pmid"], meta["abstract"]))
 
     entity_info = _build_entity_lookup(anns)
     real_pairs_by_pmid = _real_pairs_per_paper(rels)
+    entities_with_rels_by_pmid = _entities_with_relations_per_paper(rels)
     plausible_type_pairs = _plausible_type_pairs(rels, entity_info)
+    corpus_pool = _build_corpus_pool(entity_info)
 
     # Group annotations by pmid once for cheap lookup inside the loop
     anns_by_pmid = {pmid: grp for pmid, grp in anns.groupby("pmid")}
@@ -259,6 +346,8 @@ def build_training_samples(
             perturbation=perturbation,
         )
 
+    fp_sub_types: tuple[FpSubType, ...] = ("co_related", "co_standalone", "external")
+
     for _, row in rels.iterrows():
         pmid = row["pmid"]
         a_id, b_id = row["id_1"], row["id_2"]
@@ -274,30 +363,36 @@ def build_training_samples(
         # ----- gold -----
         samples.append(_make(pmid, a_id, info_a, rel_type, b_id, info_b, 1, "gold"))
 
-        # ----- #1 label flip -----
+        # ----- label flip -----
         flipped = perturb_label_flip(rel_type, rng)
         samples.append(_make(pmid, a_id, info_a, flipped, b_id, info_b, 0, "label_flip"))
 
-        # ----- #2 direction swap (only for directional relations) -----
+        # ----- direction swap (only for directional relations) -----
         if direction_swap_is_meaningful(rel_type):
             samples.append(_make(pmid, b_id, info_b, rel_type, a_id, info_a, 0, "direction_swap"))
 
-        # ----- #3 false positive -----
-        fp = sample_false_positive_pair(
-            pmid=pmid,
-            pmid_anns=anns_by_pmid.get(pmid, anns.iloc[0:0]),
-            real_pairs=real_pairs_by_pmid.get(pmid, set()),
-            plausible_type_pairs=plausible_type_pairs,
-            rng=rng,
-            type_restricted=type_restricted_false_positives,
-        )
-        if fp is not None:
-            fp_a_id, fp_b_id, fp_info_a, fp_info_b = fp
-            fake_rel = rng.choice(BIORED_RELATION_TYPES)
-            samples.append(_make(pmid, fp_a_id, fp_info_a, fake_rel,
-                                 fp_b_id, fp_info_b, 0, "false_positive"))
+        # ----- false positive (3 sub-types, each anchored on entity_a from gold) -----
+        for sub in fp_sub_types:
+            picked = sample_fp_entity_b(
+                pmid=pmid,
+                entity_a_id=a_id,
+                entity_a_info=info_a,
+                pmid_anns=anns_by_pmid.get(pmid),
+                real_pairs=real_pairs_by_pmid.get(pmid, set()),
+                entities_with_relations=entities_with_rels_by_pmid.get(pmid, set()),
+                plausible_type_pairs=plausible_type_pairs,
+                corpus_pool=corpus_pool,
+                rng=rng,
+                sub_type=sub,
+                type_restricted=type_restricted_false_positives,
+            )
+            if picked is not None:
+                fp_b_id, fp_b_info = picked
+                fake_rel = rng.choice(BIORED_RELATION_TYPES)
+                samples.append(_make(pmid, a_id, info_a, fake_rel,
+                                     fp_b_id, fp_b_info, 0, f"fp_{sub}"))
 
-        # ----- #4 false negative -----
+        # ----- false negative -----
         samples.append(_make(pmid, a_id, info_a, perturb_false_negative_label(),
                              b_id, info_b, 0, "false_negative"))
 
@@ -305,28 +400,30 @@ def build_training_samples(
 
 
 def samples_to_rels_like_df(samples: list[TrainingSample]) -> pd.DataFrame:
-    """Convert a list of TrainingSamples to DataFrame similar to 'rels' DF"""
+    """Convert a list of TrainingSamples to a DataFrame with the same shape
+    as the 'rels' DataFrame produced by pubtator_parser, plus the
+    perturbation/label columns."""
     records = [sample.to_pandas_record() for sample in samples]
     return pd.DataFrame(records)
 
 
 # ---------------------------------------------------------------------------
-# TODOs (Phase 1 follow-ups)
+# TODOs (open issues)
 # ---------------------------------------------------------------------------
 #
-# - Multi-ID entities: BioRED occasionally puts comma-separated MeSH IDs in
-#   one annotation row (e.g. "3172,3651,6927" for the umbrella term MODY).
-#   Decide: pick first, expand to multiple rows, or skip.
+# - Multi-ID umbrella entities: BioRED occasionally puts comma-separated MeSH IDs
+#   in one annotation row (e.g. "3172,3651,6927" for MODY). Currently dropped
+#   silently (about 8% of relations). See issue tracker.
 #
 # - Canonical mention selection: currently "longest". Consider "most frequent"
 #   or "first-occurring" and ablate.
 #
-# - Class balance: false_positive can produce 0-many samples per gold relation
-#   while the others produce 0-1. Decide how to balance / cap.
+# - Multi-variant generation per perturbation per gold (issue #5).
 #
-# - Direction-swap collision: after swapping, the (b_id, a_id) pair might
-#   itself be a gold relation in the same paper (different rel type). Currently
-#   we don't filter for that; should we?
+# - Two dataset versions for relation-class imbalance (full vs reduced) (issue #6).
 #
-# - Sentence-level vs document-level: the filter sees the full abstract per
-#   sample. Some prior RE work uses just the entity-spanning sentence.
+# - NoRelation as an explicit gold-positive class, not just the false_negative
+#   label (issue #7).
+#
+# - Per-perturbation spin-off datasets for one-thing-at-a-time analysis
+#   (issue #3).

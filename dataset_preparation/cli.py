@@ -49,11 +49,13 @@ class Split(str, Enum):
 
 
 class Perturbation(str, Enum):
-    gold           = "gold"
-    label_flip     = "label_flip"
-    direction_swap = "direction_swap"
-    false_positive = "false_positive"
-    false_negative = "false_negative"
+    gold             = "gold"
+    label_flip       = "label_flip"
+    direction_swap   = "direction_swap"
+    fp_co_related    = "fp_co_related"
+    fp_co_standalone = "fp_co_standalone"
+    fp_external      = "fp_external"
+    false_negative   = "false_negative"
 
 
 def _resolve_splits(split: Split) -> list[str]:
