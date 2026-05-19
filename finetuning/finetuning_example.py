@@ -15,7 +15,7 @@ import evaluate
 import glob
 import numpy as np
 
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 NUM_PROCS = 32
 LR = 0.00005
 EPOCHS = 5
@@ -123,7 +123,7 @@ model = AutoModelForSequenceClassification.from_pretrained(
     label2id=label2id,
 )
 # %%
-model = model.to("mps")
+model = model.to("cuda")
 # %%
 training_args = TrainingArguments(
     output_dir=OUT_DIR,
@@ -137,8 +137,8 @@ training_args = TrainingArguments(
     load_best_model_at_end=True,
     save_total_limit=3,
     report_to='tensorboard',
-    fp16=False,
-    dataloader_num_workers=0,
+    fp16=True,
+    # dataloader_num_workers=0,
 )
 # %%
 trainer = Trainer(
@@ -151,3 +151,6 @@ trainer = Trainer(
 )
 
 history = trainer.train()
+
+	
+trainer.evaluate(tokenized_test)
