@@ -2,6 +2,7 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,pycharm+all,visualstudiocode,git,macos,linux,windows
 
 checkpoint*/
+runs*/
 ### Git ###
 # Created by git for backups. To disable backups in Git:
 # $ git config --global mergetool.keepBackup false
