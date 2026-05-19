@@ -73,8 +73,11 @@ class TrainingSample:
         record["relation_type"] = self.relation_type
         record["id_1"] = self.entity_a_id
         record["id_2"] = self.entity_b_id
+        record["entity_a_text"] = self.entity_a_text
+        record["entity_b_text"] = self.entity_b_text
         record["perturbation"] = self.perturbation
         record["label"] = self.label
+        record["abstract"] = self.abstract
 
         return record
 
@@ -307,6 +310,7 @@ def build_training_samples(
 def samples_to_rels_like_df(samples: list[TrainingSample]) -> pd.DataFrame:
     """Convert a list of TrainingSamples to DataFrame similar to 'rels' DF"""
     records = [sample.to_pandas_record() for sample in samples]
+    print(records[0])
     return pd.DataFrame(records)
 
 
