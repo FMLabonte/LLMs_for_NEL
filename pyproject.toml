@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llms-for-nel"
+version = "0.1.0"
+description = "Synthetic data quality control for biomedical relation extraction"
+readme = "README.md"
+requires-python = ">=3.12"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["finetuning*", "dataset_preparation*"]
+
+[tool.setuptools]
+py-modules = ["pubtator_parser"]
