@@ -23,18 +23,10 @@ from rich.table import Table
 
 from build_dataset import build_split
 from data_loader import SPLIT_FILES, load_biored_split, summarize
-from perturbations import BIORED_RELATION_TYPES, SYMMETRIC_RELATIONS
+from perturbations import BIORED_RELATION_TYPES, DIRECTIONAL_RELATIONS, TOP_RELATION_TYPES
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT_DIR = _REPO_ROOT / "output"
-
-app = typer.Typer(
-    help="BioRED Phase 1 data pipeline: load, perturb, inspect.",
-    no_args_is_help=True,
-    add_completion=False,
-    rich_markup_mode="rich",
-)
-console = Console()
 
 
 # ---------------------------------------------------------------------------
@@ -62,12 +54,13 @@ def _resolve_splits(split: Split) -> list[str]:
     return list(SPLIT_FILES) if split is Split.all else [split.value]
 
 
-def _csv_path(split: str, output_dir: Path) -> Path:
-    return output_dir / f"biored_{split}_samples.csv"
+def _csv_path(split: str, output_dir: Path, keep_rare_classes: bool) -> Path:
+    suffix = "_full" if keep_rare_classes else ""
+    return output_dir / f"biored_{split}_samples{suffix}.csv"
 
 
-def _load_built_csv(split: str, output_dir: Path) -> pd.DataFrame:
-    path = _csv_path(split, output_dir)
+def _load_built_csv(split: str, output_dir: Path, keep_rare_classes: bool = False) -> pd.DataFrame:
+    path = _csv_path(split, output_dir, keep_rare_classes)
     if not path.exists():
         raise typer.BadParameter(
             f"No built CSV at {path}. Run `python cli.py build {split}` first."
@@ -78,6 +71,15 @@ def _load_built_csv(split: str, output_dir: Path) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
+
+app = typer.Typer(
+    help="BioRED Phase 1 data pipeline: load, perturb, inspect.",
+    no_args_is_help=True,
+    add_completion=False,
+    rich_markup_mode="rich",
+)
+console = Console()
+
 
 @app.command()
 def inspect(
@@ -113,8 +115,11 @@ def inspect(
         console.print(f"\n[bold]Entity types (from train):[/bold]   {info['entity_types']}")
         console.print(f"[bold]Relation types (from train):[/bold] {info['relation_types']}")
         console.print(
-            f"[dim]Symmetric relations (direction-swap skipped):[/dim] "
-            f"{sorted(SYMMETRIC_RELATIONS)}"
+            f"[dim]Kept relation types (default, reduced):[/dim] {sorted(TOP_RELATION_TYPES)}"
+        )
+        console.print(
+            f"[dim]Directional relations (direction-swap applied to):[/dim] "
+            f"{sorted(DIRECTIONAL_RELATIONS)}"
         )
 
 
@@ -128,6 +133,14 @@ def build(
         help="Disable type-restricted false-positive sampling "
              "(allows nonsense pairs like Species/CellLine).",
     ),
+    rare_classes: bool = typer.Option(
+        False,
+        "--rare-classes",
+        help="Keep the 5 rare BioRED relation types (Comparison, Cotreatment, "
+             "Drug_Interaction, Bind, Conversion). Default drops them and keeps "
+             "only Association, Positive_Correlation, Negative_Correlation. "
+             "When set, output filenames get a _full suffix.",
+    ),
     out: Path = typer.Option(
         DEFAULT_OUTPUT_DIR,
         "--out",
@@ -140,13 +153,15 @@ def build(
     splits = _resolve_splits(split)
 
     for s in splits:
-        console.print(f"\n[bold cyan]Building {s}[/bold cyan]")
+        label = "full" if rare_classes else "reduced"
+        console.print(f"\n[bold cyan]Building {s} ({label})[/bold cyan]")
         df = build_split(
             s,
             seed=seed,
             type_restricted_false_positives=not no_type_restrict,
+            keep_rare_classes=rare_classes,
         )
-        path = _csv_path(s, out)
+        path = _csv_path(s, out, rare_classes)
         df.to_csv(path, index=False)
         _print_stats_table(df, s)
         console.print(f"[green]Wrote[/green] {path} ([dim]{len(df)} rows[/dim])")
@@ -155,13 +170,18 @@ def build(
 @app.command()
 def stats(
     split: Split = typer.Argument(Split.all, help="Which split's CSV to summarize."),
+    rare_classes: bool = typer.Option(
+        False,
+        "--rare-classes",
+        help="Read the _full variant (built with --rare-classes).",
+    ),
     out: Path = typer.Option(
         DEFAULT_OUTPUT_DIR, "--out", "-o", help="Where the CSVs live.",
     ),
 ) -> None:
     """Per-perturbation distribution from already-built CSV(s)."""
     for s in _resolve_splits(split):
-        df = _load_built_csv(s, out)
+        df = _load_built_csv(s, out, keep_rare_classes=rare_classes)
         _print_stats_table(df, s)
 
 
@@ -176,12 +196,17 @@ def peek(
         None, "--label", "-l", help="Filter by label (0 = wrong, 1 = correct).",
     ),
     seed: int = typer.Option(0, "--seed", help="Random seed for sampling."),
+    rare_classes: bool = typer.Option(
+        False,
+        "--rare-classes",
+        help="Read the _full variant (built with --rare-classes).",
+    ),
     out: Path = typer.Option(
         DEFAULT_OUTPUT_DIR, "--out", "-o", help="Where the CSVs live.",
     ),
 ) -> None:
     """Print a few random sample rows from a built CSV (for eyeballing)."""
-    df = _load_built_csv(split.value, out)
+    df = _load_built_csv(split.value, out, keep_rare_classes=rare_classes)
 
     filtered = df
     if perturbation is not None:

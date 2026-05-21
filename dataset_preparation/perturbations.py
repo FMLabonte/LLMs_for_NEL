@@ -10,7 +10,7 @@ training examples. Seven perturbation labels (one positive, six negative):
   fp_co_related     - replace entity_B with another in-abstract entity that
                       has its own annotated relation elsewhere
   fp_co_standalone  - replace entity_B with another in-abstract entity that
-                      has no annotated relations at all
+                      has no annotated relations
   fp_external       - replace entity_B with an entity not in the abstract
   false_negative    - claim NoRelation for a triple that does have a relation
 
@@ -54,9 +54,22 @@ BIORED_RELATION_TYPES: list[str] = [
     "Conversion",
 ]
 
-# Symmetric relations: direction-swap is not a meaningful perturbation
-# (A Association B is identical to B Association A), so we skip them.
-SYMMETRIC_RELATIONS: set[str] = {"Association", "Comparison"}
+# The 3 BioRED types with enough examples to evaluate. The dataset defaults
+# to these; --rare-classes opts the rest back in as an ablation.
+TOP_RELATION_TYPES: list[str] = [
+    "Association",
+    "Positive_Correlation",
+    "Negative_Correlation",
+]
+
+# The only relation types where swapping (entity_A, entity_B) actually
+# changes the meaning. Association is non-directional; Comparison and the
+# rare classes are dropped from the default dataset and not meaningful to
+# direction-swap either (per Frederik on 2026-05-08).
+DIRECTIONAL_RELATIONS: set[str] = {
+    "Positive_Correlation",
+    "Negative_Correlation",
+}
 
 NO_RELATION_LABEL = "NoRelation"
 
@@ -118,7 +131,11 @@ def _real_pairs_per_paper(
     rels: pd.DataFrame,
 ) -> dict[str, set[tuple[str, str]]]:
     """For each pmid, the set of entity-id pairs that DO have a gold relation
-    (stored in both orders so membership tests are direction-agnostic)."""
+    (stored in both orders so membership tests are direction-agnostic).
+
+    Built from the full rels DataFrame, including rare-class relations, so an
+    fp candidate is never an entity pair that BioRED annotated with ANY label.
+    """
     out: dict[str, set[tuple[str, str]]] = {}
     for pmid, grp in rels.groupby("pmid"):
         pairs: set[tuple[str, str]] = set()
@@ -133,7 +150,11 @@ def _entities_with_relations_per_paper(
     rels: pd.DataFrame,
 ) -> dict[str, set[str]]:
     """For each pmid, the set of entity IDs that participate in at least one
-    annotated relation. Used to distinguish fp_co_related from fp_co_standalone."""
+    annotated relation. Used to distinguish fp_co_related from fp_co_standalone.
+
+    Built from the full rels DataFrame so a rare-class-only entity is still
+    correctly classified as having relations.
+    """
     out: dict[str, set[str]] = {}
     for pmid, grp in rels.groupby("pmid"):
         ids = set(grp["id_1"]).union(set(grp["id_2"]))
@@ -149,7 +170,8 @@ def _plausible_type_pairs(
 
     Used to constrain false-positive sampling so we don't invent pairs like
     Species/CellLine that LLMs would never plausibly hallucinate a relation for.
-    Stored in both orders.
+    Stored in both orders. Built from the full rels DataFrame so type
+    plausibility tracks the whole BioRED, not just the kept relation types.
     """
     pairs: set[tuple[str, str]] = set()
     for _, r in rels.iterrows():
@@ -183,10 +205,20 @@ def _build_corpus_pool(
 
 def perturb_label_flip(
     relation_type: str,
+    kept_relation_types: list[str],
     rng: random.Random,
 ) -> str:
-    """Pick a different relation type, uniform over the remaining options."""
-    candidates = [r for r in BIORED_RELATION_TYPES if r != relation_type]
+    """Pick a different relation type from the kept set, uniform random.
+
+    The label_flip target must be a relation type that exists in the kept
+    universe; otherwise we'd teach the classifier that a label outside the
+    training distribution is wrong, which it can already trivially detect.
+    """
+    candidates = [r for r in kept_relation_types if r != relation_type]
+    if not candidates:
+        raise ValueError(
+            f"Cannot label_flip {relation_type!r}: kept_relation_types has no alternative."
+        )
     return rng.choice(candidates)
 
 
@@ -195,8 +227,14 @@ def perturb_label_flip(
 # ---------------------------------------------------------------------------
 
 def direction_swap_is_meaningful(relation_type: str) -> bool:
-    """True for directional relations only. Skip Association / Comparison."""
-    return relation_type not in SYMMETRIC_RELATIONS
+    """True for the only directional relations: Positive/Negative_Correlation.
+
+    Per Frederik (2026-05-08): "direction swap does only work for negative and
+    positive. It does not work [for Association]." Association is non-directional
+    (it only asserts a link, not who acts on whom); the rare classes are dropped
+    from the default dataset anyway.
+    """
+    return relation_type in DIRECTIONAL_RELATIONS
 
 
 # ---------------------------------------------------------------------------
@@ -300,9 +338,16 @@ def build_training_samples(
     rels: pd.DataFrame,
     seed: int = 42,
     type_restricted_false_positives: bool = True,
+    kept_relation_types: list[str] | None = None,
 ) -> list[TrainingSample]:
     """Build the full training set: one gold sample plus the perturbed
     negatives for each gold relation.
+
+    kept_relation_types restricts which gold relations are perturbed and which
+    target types label_flip can pick. Defaults to BIORED_RELATION_TYPES (the
+    full set). FP helper structures (real_pairs, entities_with_relations,
+    plausible_type_pairs) are still built from the full rels DataFrame so a
+    pair annotated only as a rare class is correctly excluded from fp candidates.
 
     Per gold, emits up to:
       1 gold + 1 label_flip + 1 direction_swap (if directional)
@@ -310,6 +355,10 @@ def build_training_samples(
       + 1 false_negative
     Some sub-types may emit 0 samples if no candidate exists in this abstract.
     """
+    if kept_relation_types is None:
+        kept_relation_types = list(BIORED_RELATION_TYPES)
+    kept_set = set(kept_relation_types)
+
     rng = random.Random(seed)
     abstract_by_pmid = dict(zip(meta["pmid"], meta["abstract"]))
 
@@ -321,6 +370,9 @@ def build_training_samples(
 
     # Group annotations by pmid once for cheap lookup inside the loop
     anns_by_pmid = {pmid: grp for pmid, grp in anns.groupby("pmid")}
+
+    # Iterate over kept relation types only; helpers above were built from full rels
+    kept_rels = rels[rels["relation_type"].isin(kept_set)]
 
     samples: list[TrainingSample] = []
 
@@ -348,7 +400,7 @@ def build_training_samples(
 
     fp_sub_types: tuple[FpSubType, ...] = ("co_related", "co_standalone", "external")
 
-    for _, row in rels.iterrows():
+    for _, row in kept_rels.iterrows():
         pmid = row["pmid"]
         a_id, b_id = row["id_1"], row["id_2"]
         rel_type = row["relation_type"]
@@ -364,7 +416,7 @@ def build_training_samples(
         samples.append(_make(pmid, a_id, info_a, rel_type, b_id, info_b, 1, "gold"))
 
         # ----- label flip -----
-        flipped = perturb_label_flip(rel_type, rng)
+        flipped = perturb_label_flip(rel_type, kept_relation_types, rng)
         samples.append(_make(pmid, a_id, info_a, flipped, b_id, info_b, 0, "label_flip"))
 
         # ----- direction swap (only for directional relations) -----
@@ -422,8 +474,6 @@ def samples_to_rels_like_df(samples: list[TrainingSample]) -> pd.DataFrame:
 #   or "first-occurring" and ablate.
 #
 # - Multi-variant generation per perturbation per gold (issue #5).
-#
-# - Two dataset versions for relation-class imbalance (full vs reduced) (issue #6).
 #
 # - NoRelation as an explicit gold-positive class, not just the false_negative
 #   label (issue #7).

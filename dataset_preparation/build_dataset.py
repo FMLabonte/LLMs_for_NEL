@@ -12,6 +12,7 @@ import pandas as pd
 from data_loader import load_biored_split
 from perturbations import (
     BIORED_RELATION_TYPES,
+    TOP_RELATION_TYPES,
     build_training_samples,
 )
 
@@ -35,10 +36,22 @@ def build_split(
     split: str,
     seed: int = 42,
     type_restricted_false_positives: bool = True,
+    keep_rare_classes: bool = False,
 ) -> pd.DataFrame:
-    """Build the perturbed dataset for one split, return as DataFrame."""
+    """Build the perturbed dataset for one split, return as DataFrame.
+
+    keep_rare_classes=False (default) drops the 5 rare BioRED relation types
+    (Comparison, Cotreatment, Drug_Interaction, Bind, Conversion) before
+    perturbation, leaving only Association, Positive_Correlation,
+    Negative_Correlation. keep_rare_classes=True keeps the full set as an
+    ablation. See PERTURBATIONS.md, "Class-imbalance versions".
+    """
     meta, anns, rels = load_biored_split(split)
     assert_known_relation_types(rels, split)
+
+    kept_relation_types = (
+        list(BIORED_RELATION_TYPES) if keep_rare_classes else list(TOP_RELATION_TYPES)
+    )
 
     samples = build_training_samples(
         meta,
@@ -46,5 +59,6 @@ def build_split(
         rels,
         seed=seed,
         type_restricted_false_positives=type_restricted_false_positives,
+        kept_relation_types=kept_relation_types,
     )
     return pd.DataFrame([s.to_dict() for s in samples])
