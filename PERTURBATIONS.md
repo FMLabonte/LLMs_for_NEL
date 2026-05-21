@@ -32,13 +32,13 @@ This is the default the filter is trained and evaluated on. The motivation and p
 
 ### `label_flip` applies to every kept relation type
 
-Confirmed with Frederik on 2026-05-08 (transcript: "label flip of course works for all of them"). For a gold relation of any kept type, we draw a different type uniformly from the remaining kept types. With the reduced default (`Association`, `Positive_Correlation`, `Negative_Correlation`) that means each `label_flip` picks one of the other two.
+Frederik confirmed this on 2026-05-08: label_flip applies to any relation type. For a gold relation of any kept type, we draw a different type uniformly from the remaining kept types. With the reduced default (`Association`, `Positive_Correlation`, `Negative_Correlation`) that means each `label_flip` picks one of the other two.
 
 ### `direction_swap` applies only to `Positive_Correlation` and `Negative_Correlation`
 
 `Association` is **non-directional**: the relation only asserts that A and B are connected, with no claim about who acts on whom. If you swap the order of the arguments, you get back the same fact, so a "direction-swapped Association" sample would be labelled wrong while still being semantically correct, which is exactly the wrong training signal.
 
-Only `Positive_Correlation` and `Negative_Correlation` carry direction (`A` goes up, `B` goes up vs `B` going up, `A` going up, and similarly for negative). Those are the only types `direction_swap` is applied to. Frederik's exact wording on 2026-05-08: "Association just tells you these two things are somehow connected, but it doesn't tell you in what way. Therefore [...] direction swap does only work for negative and positive."
+Only `Positive_Correlation` and `Negative_Correlation` carry direction (`A` goes up, `B` goes up vs `B` going up, `A` going up, and similarly for negative). Those are the only types `direction_swap` is applied to. Frederik made this call on 2026-05-08: Association says two things are connected but not in which direction, so direction swap only makes sense for the two correlation types.
 
 The rare classes `Comparison`, `Cotreatment`, `Drug_Interaction`, `Bind`, `Conversion` are not in the perturbed dataset by default, so the question of direction-swapping them does not arise.
 
@@ -48,25 +48,21 @@ The rare classes `Comparison`, `Cotreatment`, `Drug_Interaction`, `Bind`, `Conve
 
 ### The `NoRelation -> real_relation` case is `fp_co_standalone`
 
-In meeting 3 Frederik asked us to explicitly cover the case "you have an entity and another entity which are not related according to the text [...] and we take the no relation label and we exchange it with [...] some of the three other positive labels." That case is already produced by `fp_co_standalone`, just framed from the other direction:
+On 2026-05-08 Frederik asked us to explicitly cover the case where two co-mentioned-but-unrelated entities get assigned one of the real relation labels. That case is already produced by `fp_co_standalone`, just framed from the other direction:
 
 - `fp_co_standalone` starts from a real gold `(entity_A, R, entity_B)` triple
 - replaces `entity_B` with an in-abstract entity that has **no annotated relations**
 - keeps the gold's relation label `R`
 
-The output is a sample `(entity_A, R, entity_B')` where the gold answer for that pair is `NoRelation`. That is exactly "take a NoRelation pair, claim a real relation `R` between them". No separate `no_rel_to_relation` label is added; `fp_co_standalone` already covers it. Frederik's preference on 2026-05-08: "I just wanted to explicitly mention it", not introduce a new label.
+The output is a sample `(entity_A, R, entity_B')` where the gold answer for that pair is `NoRelation`. That is exactly "take a NoRelation pair, claim a real relation `R` between them". No separate `no_rel_to_relation` label is added; `fp_co_standalone` already covers it. Frederik just wanted it called out, not given its own label.
 
 ### `false_negative` is the inverse case
 
 `false_negative` is the other side: take a real relation and relabel it as `NoRelation` (so the gold answer is `R` and the claimed answer is `NoRelation`). Together with `fp_co_standalone` this gives both directions of the NoRelation boundary.
 
-## Expected per-type difficulty (rough, to verify empirically)
+## Per-perturbation difficulty (to be measured)
 
-`label_flip` ≈ `direction_swap` < `fp_external` < `fp_co_standalone` < `fp_co_related`
-
-The intuition: detecting that an entity is missing from the abstract is essentially string lookup; detecting that two co-mentioned entities are *unrelated* requires real semantic understanding. Frederik flagged this directly in meeting 2: "swapping this one to something that is in the same abstract should be harder for the model to differentiate than something that isn't even in the abstract."
-
-We track macro-F1 per `perturbation` value so this hypothesis is testable from the metrics we already log. Frederik is fine with revising the labels after we see the numbers.
+We track macro-F1 per `perturbation` value, so the per-type difficulty ranking falls out of training once the filter is trained. Frederik mentioned on 2026-04-30 that in-abstract swaps will likely be harder for the model to spot than out-of-abstract ones (more semantic disambiguation needed), but we agreed to verify empirically before locking in any specific ordering.
 
 ## Sampling & balance rules
 
