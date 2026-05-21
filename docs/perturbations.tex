@@ -51,7 +51,7 @@ The dataset focuses on the three relation types that actually have enough exampl
 \textbf{Name} & \textbf{Family} & \textbf{Mutates} & \textbf{Why} & \textbf{Lbl} & \textbf{Applies to} \\
 \midrule
 \code{gold} & positive & nothing & establishes the positive class & 1 & all kept \\
-\code{label\_flip} & label & relation type, swapped to a different one (uniform random over the other kept types) & LLM picks the wrong relation type from a plausible menu & 0 & all kept \\
+\code{label\_flip} & label & relation type, swapped to a different one (one row per alternative kept type) & LLM picks the wrong relation type from a plausible menu & 0 & all kept \\
 \code{direction\_swap} & direction & swap \code{entity\_A} and \code{entity\_B}, keep relation type & LLM reverses causality (e.g.\ ``gene up-regulates compound'' vs ``compound up-regulates gene'') & 0 & \code{Pos/Neg\_Corr.} only \\
 \code{fp\_co\_related} & false pos. & replace \code{entity\_B} with another entity that is in the abstract AND has its own annotated relation (just not with \code{entity\_A}) & hardest false-positive case: both entities are independently real in the text, the model has to decide \emph{this specific pairing} is fabricated & 0 & all kept \\
 \code{fp\_co\_standalone} & false pos. & replace \code{entity\_B} with an entity that is in the abstract but has no annotated relation at all & medium false-positive: the entity is co-mentioned but bears no real relation in the abstract & 0 & all kept \\
@@ -62,9 +62,11 @@ The dataset focuses on the three relation types that actually have enough exampl
 
 \section*{Per-perturbation notes}
 
-\subsection*{\code{label\_flip} applies to every kept relation type}
+\subsection*{\code{label\_flip} enumerates every alternative kept label per gold}
 
-Frederik confirmed this on 2026-05-08: \code{label\_flip} applies to any relation type. For a gold relation of any kept type, we draw a different type uniformly from the remaining kept types. With the reduced default (\code{Association}, \code{Positive\_Correlation}, \code{Negative\_Correlation}) that means each \code{label\_flip} picks one of the other two.
+For each gold relation we emit one \code{label\_flip} row per alternative kept relation type. Under the reduced default (\code{Association}, \code{Positive\_Correlation}, \code{Negative\_Correlation}) that means every gold produces 2 \code{label\_flip} rows: one swap to each of the other two types. With \code{--rare-classes} every gold produces 7 \code{label\_flip} rows.
+
+Reason: keeps the entity pair fixed across all label-swap directions, so per-direction difficulty (e.g.\ \code{Positive\_Correlation $\to$ Association} vs \code{Positive\_Correlation $\to$ Negative\_Correlation}) can be measured without being confounded by different entity pairs. Decided with Frederik on 2026-05-21.
 
 \subsection*{\code{direction\_swap} applies only to \code{Positive\_Correlation} and \code{Negative\_Correlation}}
 
@@ -151,8 +153,11 @@ We track macro-F1 per \code{perturbation} value, so the per-type difficulty rank
 
 \begin{itemize}
 \item \code{direction\_swap} is restricted to \code{Positive\_Correlation} and \code{Negative\_Correlation} (see the per-perturbation notes above).
+\item \code{label\_flip} enumerates every alternative kept relation type per gold (one row per alternative). No random pick; the data set sees every label-swap direction on every entity pair.
+\item \code{fp\_co\_related} and \code{fp\_co\_standalone} collect all eligible in-abstract candidates per gold (the in-abstract entity pool is small, typically under 20). \code{fp\_external} samples up to \code{FP\_EXTERNAL\_MAX\_PER\_GOLD} (default 5) candidates per gold from the corpus pool, since enumerating the full corpus would blow up the pool.
+\item \textbf{FP balance cap:} the per-split count of each FP type is capped at the per-split \code{label\_flip} count. If the FP candidate pool exceeds the cap, we randomly downsample (seeded) to exactly the cap. This keeps all six perturbation types in the same order of magnitude. If a later experiment shows a particular FP type is the hardest to detect, we lift its cap by raising \code{FP\_EXTERNAL\_MAX\_PER\_GOLD} or by generating more candidates per gold.
 \item False-positive sampling is \textbf{type-restricted by default}: only \code{(entity\_type\_a, entity\_type\_b)} pairs that appear in real BioRED relations are eligible. This avoids implausible Species/CellLine pairings the model would learn to reject trivially. The CLI flag \code{--no-type-restrict} disables it.
-\item Each gold relation produces at most one sample of each perturbation type. To average out random choices (which entity got swapped, which alt-label was picked), we plan to generate \textbf{$N$ variants per gold per type} (default $N=5$; CLI: \code{--variants N}). Not yet implemented; tracked as issue~\#5.
+\item \textbf{Reproducibility:} same seed gives the same CSV every run. The seeded \code{random.Random} is used both for the \code{fp\_external} per-gold subsample and for the per-split downsample to the cap.
 \end{itemize}
 
 \section*{Class-imbalance versions}

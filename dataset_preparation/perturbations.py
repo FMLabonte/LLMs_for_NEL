@@ -5,7 +5,8 @@ Given a gold BioRED relation, produce perturbed variants used as negative
 training examples. Seven perturbation labels (one positive, six negative):
 
   gold              - unchanged BioRED relation (positive)
-  label_flip        - swap relation type for a different one
+  label_flip        - swap relation type for a different one (ALL alternatives
+                      enumerated per gold, not one at random)
   direction_swap    - swap entity_A and entity_B (only for directional rels)
   fp_co_related     - replace entity_B with another in-abstract entity that
                       has its own annotated relation elsewhere
@@ -16,6 +17,10 @@ training examples. Seven perturbation labels (one positive, six negative):
 
 All perturbations operate on the (entity_pair, relation_label) tuple ONLY.
 The abstract text is never modified.
+
+Balance rule: the per-split count of each FP type is capped at the per-split
+label_flip count, so all six perturbation types end up in roughly the same
+order of magnitude. Decided 2026-05-21.
 
 See PERTURBATIONS.md (root of repo) for the full taxonomy with rationale,
 worked examples, and design decisions.
@@ -63,15 +68,20 @@ TOP_RELATION_TYPES: list[str] = [
 ]
 
 # The only relation types where swapping (entity_A, entity_B) actually
-# changes the meaning. Association is non-directional; Comparison and the
-# rare classes are dropped from the default dataset and not meaningful to
-# direction-swap either (per Frederik on 2026-05-08).
+# changes the meaning. Association is non-directional; the rare classes
+# are dropped from the default dataset and not meaningful to direction-swap
+# either (per Frederik on 2026-05-08).
 DIRECTIONAL_RELATIONS: set[str] = {
     "Positive_Correlation",
     "Negative_Correlation",
 }
 
 NO_RELATION_LABEL = "NoRelation"
+
+# fp_external would otherwise produce thousands of candidates per gold (the
+# whole corpus pool, type-filtered). Cap the per-gold count to keep the FP
+# pool tractable before the per-split downsample to label_flip-count.
+FP_EXTERNAL_MAX_PER_GOLD = 5
 
 
 @dataclass(frozen=True)
@@ -200,39 +210,15 @@ def _build_corpus_pool(
 
 
 # ---------------------------------------------------------------------------
-# Perturbation: Label flip
-# ---------------------------------------------------------------------------
-
-def perturb_label_flip(
-    relation_type: str,
-    kept_relation_types: list[str],
-    rng: random.Random,
-) -> str:
-    """Pick a different relation type from the kept set, uniform random.
-
-    The label_flip target must be a relation type that exists in the kept
-    universe; otherwise we'd teach the classifier that a label outside the
-    training distribution is wrong, which it can already trivially detect.
-    """
-    candidates = [r for r in kept_relation_types if r != relation_type]
-    if not candidates:
-        raise ValueError(
-            f"Cannot label_flip {relation_type!r}: kept_relation_types has no alternative."
-        )
-    return rng.choice(candidates)
-
-
-# ---------------------------------------------------------------------------
 # Perturbation: Direction swap
 # ---------------------------------------------------------------------------
 
 def direction_swap_is_meaningful(relation_type: str) -> bool:
     """True for the only directional relations: Positive/Negative_Correlation.
 
-    Per Frederik (2026-05-08): "direction swap does only work for negative and
-    positive. It does not work [for Association]." Association is non-directional
-    (it only asserts a link, not who acts on whom); the rare classes are dropped
-    from the default dataset anyway.
+    Association is non-directional (only asserts a link, not who acts on whom);
+    the rare classes are dropped from the default dataset anyway. Decision per
+    Frederik on 2026-05-08.
     """
     return relation_type in DIRECTIONAL_RELATIONS
 
@@ -241,7 +227,7 @@ def direction_swap_is_meaningful(relation_type: str) -> bool:
 # Perturbation: False positive (3 sub-types)
 # ---------------------------------------------------------------------------
 
-def sample_fp_entity_b(
+def sample_fp_candidates(
     pmid: str,
     entity_a_id: str,
     entity_a_info: dict,
@@ -253,21 +239,15 @@ def sample_fp_entity_b(
     rng: random.Random,
     sub_type: FpSubType,
     type_restricted: bool = True,
-) -> tuple[str, dict] | None:
-    """Pick an entity_B for a false-positive pair, anchored on a fixed entity_A.
+    external_max_per_gold: int = FP_EXTERNAL_MAX_PER_GOLD,
+) -> list[tuple[str, dict]]:
+    """Return all eligible entity_B candidates for a false-positive pair,
+    anchored on a fixed entity_A.
 
-    sub_type controls where entity_B is drawn from:
-
-      co_related    : in this abstract AND has its own annotated relation
-                      elsewhere (just not with entity_A).
-      co_standalone : in this abstract AND has no annotated relations at all.
-      external      : NOT in this abstract; drawn from the corpus pool.
-
-    type_restricted=True (default) further filters to entity-type pairs that
-    actually appear in real BioRED relations, avoiding implausible
-    Species/CellLine combinations LLMs would never plausibly hallucinate.
-
-    Returns (b_id, b_info) or None if no candidate exists.
+    For co_related and co_standalone the in-abstract pool is small (typically
+    < 20 entities) so we return everything. For external the corpus pool is
+    huge; we draw at most external_max_per_gold candidates so the global FP
+    pool stays tractable before the per-split downsample.
     """
     if sub_type == "external":
         in_abstract_ids = (
@@ -287,37 +267,36 @@ def sample_fp_entity_b(
             ):
                 continue
             candidates.append((b_id, b_info))
-    else:
-        # co_related or co_standalone: candidates from this abstract
-        if pmid_anns is None or len(pmid_anns) == 0:
-            return None
-        ent_rows = (
-            pmid_anns[["mesh_id", "entity_type", "mention"]]
-            .drop_duplicates(subset=["mesh_id"])
-        )
-        candidates = []
-        for _, e in ent_rows.iterrows():
-            b_id = e["mesh_id"]
-            if b_id == entity_a_id:
-                continue
-            if (entity_a_id, b_id) in real_pairs:
-                continue  # this pair already has a real relation; not a false positive
-            if type_restricted and (
-                (entity_a_info["entity_type"], e["entity_type"])
-                not in plausible_type_pairs
-            ):
-                continue
-            has_rels = b_id in entities_with_relations
-            if sub_type == "co_related" and not has_rels:
-                continue
-            if sub_type == "co_standalone" and has_rels:
-                continue
-            b_info = {"mention": e["mention"], "entity_type": e["entity_type"]}
-            candidates.append((b_id, b_info))
+        if len(candidates) > external_max_per_gold:
+            candidates = rng.sample(candidates, external_max_per_gold)
+        return candidates
 
-    if not candidates:
-        return None
-    return rng.choice(candidates)
+    # co_related or co_standalone: candidates from this abstract
+    if pmid_anns is None or len(pmid_anns) == 0:
+        return []
+    ent_rows = (
+        pmid_anns[["mesh_id", "entity_type", "mention"]]
+        .drop_duplicates(subset=["mesh_id"])
+    )
+    candidates = []
+    for _, e in ent_rows.iterrows():
+        b_id = e["mesh_id"]
+        if b_id == entity_a_id:
+            continue
+        if (entity_a_id, b_id) in real_pairs:
+            continue
+        if type_restricted and (
+            (entity_a_info["entity_type"], e["entity_type"])
+            not in plausible_type_pairs
+        ):
+            continue
+        has_rels = b_id in entities_with_relations
+        if sub_type == "co_related" and not has_rels:
+            continue
+        if sub_type == "co_standalone" and has_rels:
+            continue
+        candidates.append((b_id, {"mention": e["mention"], "entity_type": e["entity_type"]}))
+    return candidates
 
 
 # ---------------------------------------------------------------------------
@@ -340,20 +319,22 @@ def build_training_samples(
     type_restricted_false_positives: bool = True,
     kept_relation_types: list[str] | None = None,
 ) -> list[TrainingSample]:
-    """Build the full training set: one gold sample plus the perturbed
-    negatives for each gold relation.
+    """Build the full training set for one split.
+
+    Per gold relation we emit:
+      - 1 gold sample
+      - (|kept_relation_types| - 1) label_flip samples (every alternative kept type)
+      - 1 direction_swap sample (only for Pos/Neg_Correlation)
+      - 1 false_negative sample
+      - up to LF/N_gold fp_co_related, fp_co_standalone, fp_external samples
+        each, where LF is the per-split label_flip count and the per-gold pool
+        is generated then globally downsampled to LF rows per FP type.
 
     kept_relation_types restricts which gold relations are perturbed and which
     target types label_flip can pick. Defaults to BIORED_RELATION_TYPES (the
     full set). FP helper structures (real_pairs, entities_with_relations,
     plausible_type_pairs) are still built from the full rels DataFrame so a
-    pair annotated only as a rare class is correctly excluded from fp candidates.
-
-    Per gold, emits up to:
-      1 gold + 1 label_flip + 1 direction_swap (if directional)
-      + 1 fp_co_related + 1 fp_co_standalone + 1 fp_external
-      + 1 false_negative
-    Some sub-types may emit 0 samples if no candidate exists in this abstract.
+    pair annotated only as a rare class is correctly excluded from FP candidates.
     """
     if kept_relation_types is None:
         kept_relation_types = list(BIORED_RELATION_TYPES)
@@ -368,13 +349,13 @@ def build_training_samples(
     plausible_type_pairs = _plausible_type_pairs(rels, entity_info)
     corpus_pool = _build_corpus_pool(entity_info)
 
-    # Group annotations by pmid once for cheap lookup inside the loop
     anns_by_pmid = {pmid: grp for pmid, grp in anns.groupby("pmid")}
-
-    # Iterate over kept relation types only; helpers above were built from full rels
     kept_rels = rels[rels["relation_type"].isin(kept_set)]
 
     samples: list[TrainingSample] = []
+    fp_sub_types: tuple[FpSubType, ...] = ("co_related", "co_standalone", "external")
+    fp_pools: dict[FpSubType, list[TrainingSample]] = {s: [] for s in fp_sub_types}
+    label_flip_count = 0
 
     def _make(
         pmid: str,
@@ -398,8 +379,8 @@ def build_training_samples(
             perturbation=perturbation,
         )
 
-    fp_sub_types: tuple[FpSubType, ...] = ("co_related", "co_standalone", "external")
-
+    # Phase 1: per-gold emission for gold/label_flip/direction_swap/false_negative,
+    # and collection of FP candidates into per-subtype pools.
     for _, row in kept_rels.iterrows():
         pmid = row["pmid"]
         a_id, b_id = row["id_1"], row["id_2"]
@@ -412,20 +393,21 @@ def build_training_samples(
         if not info_a or not info_b:
             continue
 
-        # ----- gold -----
         samples.append(_make(pmid, a_id, info_a, rel_type, b_id, info_b, 1, "gold"))
 
-        # ----- label flip -----
-        flipped = perturb_label_flip(rel_type, kept_relation_types, rng)
-        samples.append(_make(pmid, a_id, info_a, flipped, b_id, info_b, 0, "label_flip"))
+        # label_flip: one row per alternative kept type
+        for alt in kept_relation_types:
+            if alt == rel_type:
+                continue
+            samples.append(_make(pmid, a_id, info_a, alt, b_id, info_b, 0, "label_flip"))
+            label_flip_count += 1
 
-        # ----- direction swap (only for directional relations) -----
         if direction_swap_is_meaningful(rel_type):
             samples.append(_make(pmid, b_id, info_b, rel_type, a_id, info_a, 0, "direction_swap"))
 
-        # ----- false positive (3 sub-types, each anchored on entity_a from gold) -----
+        # FP: collect all eligible candidates per subtype, downsample globally below
         for sub in fp_sub_types:
-            picked = sample_fp_entity_b(
+            candidates = sample_fp_candidates(
                 pmid=pmid,
                 entity_a_id=a_id,
                 entity_a_info=info_a,
@@ -438,18 +420,21 @@ def build_training_samples(
                 sub_type=sub,
                 type_restricted=type_restricted_false_positives,
             )
-            if picked is not None:
-                fp_b_id, fp_b_info = picked
-                # Keep the gold's relation type so this perturbation isolates
-                # the wrong-entity_B signal. Otherwise it overlaps with label_flip
-                # (the model could detect fp_* via the random relation type rather
-                # than via the entity swap).
-                samples.append(_make(pmid, a_id, info_a, rel_type,
-                                     fp_b_id, fp_b_info, 0, f"fp_{sub}"))
+            for fp_b_id, fp_b_info in candidates:
+                # Keep gold's relation_type so this perturbation isolates the
+                # wrong-entity_B signal (otherwise it overlaps with label_flip).
+                fp_pools[sub].append(_make(
+                    pmid, a_id, info_a, rel_type, fp_b_id, fp_b_info, 0, f"fp_{sub}",
+                ))
 
-        # ----- false negative -----
         samples.append(_make(pmid, a_id, info_a, perturb_false_negative_label(),
                              b_id, info_b, 0, "false_negative"))
+
+    # Phase 2: cap each FP pool at the per-split label_flip count
+    for sub, pool in fp_pools.items():
+        if len(pool) > label_flip_count:
+            pool = rng.sample(pool, label_flip_count)
+        samples.extend(pool)
 
     return samples
 
@@ -472,8 +457,6 @@ def samples_to_rels_like_df(samples: list[TrainingSample]) -> pd.DataFrame:
 #
 # - Canonical mention selection: currently "longest". Consider "most frequent"
 #   or "first-occurring" and ablate.
-#
-# - Multi-variant generation per perturbation per gold (issue #5).
 #
 # - NoRelation as an explicit gold-positive class, not just the false_negative
 #   label (issue #7).

@@ -21,7 +21,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from build_dataset import build_split
+from build_dataset import build_perturbed_dataframe
 from data_loader import SPLIT_FILES, load_biored_split, summarize
 from perturbations import BIORED_RELATION_TYPES, DIRECTIONAL_RELATIONS, TOP_RELATION_TYPES
 
@@ -155,7 +155,7 @@ def build(
     for s in splits:
         label = "full" if rare_classes else "reduced"
         console.print(f"\n[bold cyan]Building {s} ({label})[/bold cyan]")
-        df = build_split(
+        df = build_perturbed_dataframe(
             s,
             seed=seed,
             type_restricted_false_positives=not no_type_restrict,
