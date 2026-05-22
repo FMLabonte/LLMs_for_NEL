@@ -370,3 +370,16 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/python,pycharm+all,visualstudiocode,git,macos,linux,windows
+
+# Project-specific
+output/
+
+# LaTeX build artifacts (commit only the .tex source and the .pdf output)
+docs/*.aux
+docs/*.log
+docs/*.out
+docs/*.toc
+docs/*.synctex.gz
+docs/*.fdb_latexmk
+docs/*.fls
+
