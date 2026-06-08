@@ -5,8 +5,9 @@ Given a gold BioRED relation, produce perturbed variants used as negative
 training examples. Seven perturbation labels (one positive, six negative):
 
   gold              - unchanged BioRED relation (positive)
-  label_flip        - swap relation type for a different one (ALL alternatives
-                      enumerated per gold, not one at random)
+  label_flip        - swap relation type for a different one (every alternative
+                      kept type, except a type the gold already implies, e.g.
+                      Pos/Neg_Correlation are not flipped to the weaker Association)
   direction_swap    - swap entity_A and entity_B (only for directional rels)
   fp_co_related     - replace entity_B with another in-abstract entity that
                       has its own annotated relation elsewhere
@@ -74,6 +75,20 @@ TOP_RELATION_TYPES: list[str] = [
 DIRECTIONAL_RELATIONS: set[str] = {
     "Positive_Correlation",
     "Negative_Correlation",
+}
+
+# A label_flip is only a usable NEGATIVE when the swapped relation type is
+# actually wrong for the pair. Positive_Correlation and Negative_Correlation both
+# still imply a generic Association (a positive/negative correlation IS an
+# association), so flipping either of them to Association yields a claim that is
+# still true, just less specific. That is label noise, not a negative, so we skip
+# it. Mapping: gold relation type -> set of weaker types it implies (and must not
+# be flipped to). The reverse direction (Association -> a specific correlation) is
+# left in place: it asserts a direction the annotators did not, which is
+# defensible as a negative.
+IMPLIED_RELATIONS: dict[str, set[str]] = {
+    "Positive_Correlation": {"Association"},
+    "Negative_Correlation": {"Association"},
 }
 
 NO_RELATION_LABEL = "NoRelation"
@@ -323,7 +338,9 @@ def build_training_samples(
 
     Per gold relation we emit:
       - 1 gold sample
-      - (|kept_relation_types| - 1) label_flip samples (every alternative kept type)
+      - up to (|kept_relation_types| - 1) label_flip samples (every alternative
+        kept type, minus any type the gold implies, e.g. a specific correlation
+        is not flipped to the weaker Association)
       - 1 direction_swap sample (only for Pos/Neg_Correlation)
       - 1 false_negative sample
       - up to LF/N_gold fp_co_related, fp_co_standalone, fp_external samples
@@ -395,9 +412,12 @@ def build_training_samples(
 
         samples.append(_make(pmid, a_id, info_a, rel_type, b_id, info_b, 1, "gold"))
 
-        # label_flip: one row per alternative kept type
+        # label_flip: one row per alternative kept type, skipping any type the
+        # gold relation already implies (e.g. Positive_Correlation -> Association
+        # is still true, so it is not a valid negative). See IMPLIED_RELATIONS.
+        implied = IMPLIED_RELATIONS.get(rel_type, frozenset())
         for alt in kept_relation_types:
-            if alt == rel_type:
+            if alt == rel_type or alt in implied:
                 continue
             samples.append(_make(pmid, a_id, info_a, alt, b_id, info_b, 0, "label_flip"))
             label_flip_count += 1
