@@ -6,8 +6,8 @@ training examples. Seven perturbation labels (one positive, six negative):
 
   gold              - unchanged BioRED relation (positive)
   label_flip        - swap relation type for a different one (every alternative
-                      kept type, except a type the gold already implies, e.g.
-                      Pos/Neg_Correlation are not flipped to the weaker Association)
+                      kept type, except Association when the gold is any specific
+                      type, since every specific relation still implies Association)
   direction_swap    - swap entity_A and entity_B (only for directional rels)
   fp_co_related     - replace entity_B with another in-abstract entity that
                       has its own annotated relation elsewhere
@@ -78,17 +78,23 @@ DIRECTIONAL_RELATIONS: set[str] = {
 }
 
 # A label_flip is only a usable NEGATIVE when the swapped relation type is
-# actually wrong for the pair. Positive_Correlation and Negative_Correlation both
-# still imply a generic Association (a positive/negative correlation IS an
-# association), so flipping either of them to Association yields a claim that is
-# still true, just less specific. That is label noise, not a negative, so we skip
-# it. Mapping: gold relation type -> set of weaker types it implies (and must not
-# be flipped to). The reverse direction (Association -> a specific correlation) is
-# left in place: it asserts a direction the annotators did not, which is
-# defensible as a negative.
+# actually wrong for the pair. Every SPECIFIC BioRED relation type implies the
+# generic Association: a Bind, Cotreatment, Drug_Interaction, Conversion, or a
+# positive/negative correlation between two entities still means they are
+# associated. So flipping any specific type to Association produces a claim that is
+# still true, not a usable negative. We therefore never use Association as a
+# label_flip target. Mapping: gold relation type -> set of weaker types it implies
+# (and must not be flipped to).
+#
+# Association itself is NOT a key: flipping it to a specific type asserts a
+# direction/mechanism the annotators did not, which is a defensible negative, so we
+# keep those. The only entailment in BioRED's otherwise flat taxonomy is
+# "specific type -> Association"; there is no specific -> specific entailment.
+# Comparison is the borderline case (a study comparison is a weaker link than a
+# biological association); included to be safe and flagged for Frederik.
+# Houman's judgment 2026-06-09, to be confirmed with Frederik.
 IMPLIED_RELATIONS: dict[str, set[str]] = {
-    "Positive_Correlation": {"Association"},
-    "Negative_Correlation": {"Association"},
+    rel: {"Association"} for rel in BIORED_RELATION_TYPES if rel != "Association"
 }
 
 NO_RELATION_LABEL = "NoRelation"
@@ -339,8 +345,8 @@ def build_training_samples(
     Per gold relation we emit:
       - 1 gold sample
       - up to (|kept_relation_types| - 1) label_flip samples (every alternative
-        kept type, minus any type the gold implies, e.g. a specific correlation
-        is not flipped to the weaker Association)
+        kept type, minus Association when the gold is any specific type, since
+        every specific relation still implies Association)
       - 1 direction_swap sample (only for Pos/Neg_Correlation)
       - 1 false_negative sample
       - up to LF/N_gold fp_co_related, fp_co_standalone, fp_external samples

@@ -21,7 +21,7 @@ This is the default the filter is trained and evaluated on. The motivation and p
 | Name | Family | Mutates | Why | Label | Applies to |
 |---|---|---|---|---|---|
 | `gold` | positive | nothing | establishes the positive class | 1 | all kept relation types |
-| `label_flip` | label | relation type, swapped to a different one (one row per alternative kept type, except a type the gold implies) | LLM picks the wrong relation type from a plausible menu | 0 | all kept; a specific correlation is not flipped to `Association` |
+| `label_flip` | label | relation type, swapped to a different one (one row per alternative kept type, except a type the gold implies) | LLM picks the wrong relation type from a plausible menu | 0 | all kept; no specific type is flipped to `Association` |
 | `direction_swap` | direction | swap `entity_A` and `entity_B`, keep relation type | LLM reverses causality (e.g. "gene up-regulates compound" vs "compound up-regulates gene") | 0 | `Positive_Correlation`, `Negative_Correlation` only |
 | `fp_co_related` | false positive | replace `entity_B` with another entity that is in the abstract AND has its own annotated relation (just not with `entity_A`) | hardest false-positive case: both entities are independently real in the text, the model has to decide *this specific pairing* is fabricated | 0 | all kept relation types |
 | `fp_co_standalone` | false positive | replace `entity_B` with an entity that is in the abstract but has no annotated relation at all | medium false-positive: the entity is co-mentioned but bears no real relation in the abstract | 0 | all kept relation types |
@@ -30,17 +30,19 @@ This is the default the filter is trained and evaluated on. The motivation and p
 
 ## Per-perturbation notes
 
-### `label_flip` enumerates every alternative kept label per gold, except types the gold implies
+### `label_flip` enumerates every alternative kept label per gold, except `Association` from a specific type
 
-For each gold relation we emit one `label_flip` row per alternative kept relation type, **except a target type that the gold already implies**. `Positive_Correlation` and `Negative_Correlation` both imply a generic `Association` (a positive or negative correlation *is* an association), so flipping a specific correlation to `Association` produces a claim that is still true, just less specific. That is label noise, not a usable negative, so it is skipped (see `IMPLIED_RELATIONS` in `perturbations.py`).
+For each gold relation we emit one `label_flip` row per alternative kept relation type, **except `Association` when the gold is a specific type**. Every specific BioRED relation (`Positive_Correlation`, `Negative_Correlation`, `Bind`, `Cotreatment`, `Drug_Interaction`, `Conversion`, and arguably `Comparison`) implies a generic `Association`: two entities that bind, are co-treated, interact, convert, or correlate are still *associated*. So flipping a specific type to `Association` produces a claim that is still true, just less specific. That is label noise, not a usable negative, so we never use `Association` as a `label_flip` target (see `IMPLIED_RELATIONS` in `perturbations.py`).
 
 Under the reduced default (`Association`, `Positive_Correlation`, `Negative_Correlation`):
 
 - a `Positive_Correlation` gold produces 1 `label_flip` row (to `Negative_Correlation`; the swap to `Association` is skipped).
 - a `Negative_Correlation` gold produces 1 `label_flip` row (to `Positive_Correlation`).
-- an `Association` gold produces 2 `label_flip` rows (to `Positive_Correlation` and `Negative_Correlation`). Those assert a direction the annotators did not, which is defensible as a negative, so they are kept.
+- an `Association` gold produces 2 `label_flip` rows (to `Positive_Correlation` and `Negative_Correlation`). Flipping `Association` to a specific type asserts a mechanism the annotators did not, which is defensible as a negative, so it is kept.
 
-Reason: keep the entity pair fixed across label-swap directions so per-direction difficulty can be measured, but only emit swaps that are actually wrong. The original enumerate-all decision was with Frederik on 2026-05-21; the implied-type skip refines it. The reverse direction (`Association → Positive/Negative_Correlation`) is kept for now and is an open point for discussion.
+With `--rare-classes` the same rule covers all eight types: a `Bind`, `Cotreatment`, `Drug_Interaction`, or `Conversion` gold also no longer produces an `Association` flip.
+
+Reason: keep the entity pair fixed across label-swap directions so per-direction difficulty can be measured, but only emit swaps that are actually wrong. The original enumerate-all decision was with Frederik on 2026-05-21; skipping the `Association` target refines it (Houman's call 2026-06-09, to confirm with Frederik; `Comparison` is the borderline case). The reverse direction (`Association → a specific type`) is kept for now and is an open point.
 
 ### `direction_swap` applies only to `Positive_Correlation` and `Negative_Correlation`
 
@@ -75,7 +77,7 @@ We track macro-F1 per `perturbation` value, so the per-type difficulty ranking f
 ## Sampling & balance rules
 
 - `direction_swap` is restricted to `Positive_Correlation` and `Negative_Correlation` (see above).
-- `label_flip` enumerates every alternative kept relation type per gold (one row per alternative), except a target type the gold already implies (a specific correlation is not flipped to the weaker `Association`; see above). No random pick.
+- `label_flip` enumerates every alternative kept relation type per gold (one row per alternative), except `Association` when the gold is a specific type (every specific relation implies association, so that flip would still be true; see above). No random pick.
 - `fp_co_related` and `fp_co_standalone` collect ALL eligible in-abstract candidates per gold (the in-abstract entity pool is small, typically under 20). `fp_external` samples up to `FP_EXTERNAL_MAX_PER_GOLD` (default 5) candidates per gold from the corpus pool, since enumerating the full corpus would blow up the pool.
 - **FP balance cap:** the per-split count of each FP type is capped at the per-split `label_flip` count. If the FP candidate pool exceeds the cap, we randomly downsample (seeded) to exactly the cap. This keeps all six perturbation types in the same order of magnitude. If a later experiment shows a particular FP type is the hardest to detect, we lift its cap by raising `FP_EXTERNAL_MAX_PER_GOLD` or by generating more candidates per gold.
 - False-positive sampling is **type-restricted by default**: only `(entity_type_a, entity_type_b)` pairs that appear in real BioRED relations are eligible. This avoids implausible Species/CellLine pairings the model would learn to reject trivially. `--no-type-restrict` disables.
