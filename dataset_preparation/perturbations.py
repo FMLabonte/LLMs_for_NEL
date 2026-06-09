@@ -139,6 +139,30 @@ class TrainingSample:
         }
 
 
+def _split_multi_id_annotations(anns: pd.DataFrame) -> pd.DataFrame:
+    """Split BioRED annotations whose ``mesh_id`` is a comma-separated ID list.
+
+    BioRED tags a single text span that refers to several normalized concepts with
+    all of their IDs in one annotation, e.g. ``mesh_id = "D002289,D055752"`` for the
+    span "squamous- and small-cell lung cancer". Relations always reference the
+    individual IDs (verified: no relation endpoint contains a comma), so without
+    splitting, those individual IDs never match an annotation and about 8% of gold
+    relations get silently dropped. We explode such annotations into one row per ID,
+    keeping the shared mention / entity_type / offsets.
+
+    Comma is the only multi-ID separator. Other punctuation that appears in a single
+    id (e.g. ``|`` in a SequenceVariant id like ``c|DEL|1314_1328|``) is left
+    untouched.
+    """
+    if anns.empty or "mesh_id" not in anns.columns:
+        return anns
+    out = anns.copy()
+    out["mesh_id"] = out["mesh_id"].apply(
+        lambda v: [s.strip() for s in str(v).split(",")] if pd.notna(v) else [v]
+    )
+    return out.explode("mesh_id", ignore_index=True)
+
+
 def _build_entity_lookup(
     anns: pd.DataFrame,
 ) -> dict[tuple[str, str], dict]:
@@ -365,6 +389,11 @@ def build_training_samples(
 
     rng = random.Random(seed)
     abstract_by_pmid = dict(zip(meta["pmid"], meta["abstract"]))
+
+    # Split comma-separated multi-ID annotations so relations that reference an
+    # individual id resolve. Without this, ~8% of gold relations are dropped because
+    # the relation's id does not exact-match the composite annotation id.
+    anns = _split_multi_id_annotations(anns)
 
     entity_info = _build_entity_lookup(anns)
     real_pairs_by_pmid = _real_pairs_per_paper(rels)
