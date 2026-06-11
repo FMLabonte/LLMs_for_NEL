@@ -44,23 +44,19 @@ class Perturbation(str, Enum):
     gold             = "gold"
     label_flip       = "label_flip"
     direction_swap   = "direction_swap"
-    fp_co_related    = "fp_co_related"
-    fp_co_standalone = "fp_co_standalone"
     fp_external      = "fp_external"
-    false_negative   = "false_negative"
 
 
 def _resolve_splits(split: Split) -> list[str]:
     return list(SPLIT_FILES) if split is Split.all else [split.value]
 
 
-def _csv_path(split: str, output_dir: Path, keep_rare_classes: bool) -> Path:
-    suffix = "_full" if keep_rare_classes else ""
-    return output_dir / f"biored_{split}_samples{suffix}.csv"
+def _csv_path(split: str, output_dir: Path) -> Path:
+    return output_dir / f"biored_{split}_samples.csv"
 
 
-def _load_built_csv(split: str, output_dir: Path, keep_rare_classes: bool = False) -> pd.DataFrame:
-    path = _csv_path(split, output_dir, keep_rare_classes)
+def _load_built_csv(split: str, output_dir: Path) -> pd.DataFrame:
+    path = _csv_path(split, output_dir)
     if not path.exists():
         raise typer.BadParameter(
             f"No built CSV at {path}. Run `python cli.py build {split}` first."
@@ -133,14 +129,6 @@ def build(
         help="Disable type-restricted false-positive sampling "
              "(allows nonsense pairs like Species/CellLine).",
     ),
-    rare_classes: bool = typer.Option(
-        False,
-        "--rare-classes",
-        help="Keep the 5 rare BioRED relation types (Comparison, Cotreatment, "
-             "Drug_Interaction, Bind, Conversion). Default drops them and keeps "
-             "only Association, Positive_Correlation, Negative_Correlation. "
-             "When set, output filenames get a _full suffix.",
-    ),
     out: Path = typer.Option(
         DEFAULT_OUTPUT_DIR,
         "--out",
@@ -148,20 +136,18 @@ def build(
         help="Output directory for the CSVs.",
     ),
 ) -> None:
-    """Build the perturbed (gold + 4-perturbation) CSV(s)."""
+    """Build the perturbed (4-class gold + perturbation) CSV(s)."""
     out.mkdir(parents=True, exist_ok=True)
     splits = _resolve_splits(split)
 
     for s in splits:
-        label = "full" if rare_classes else "reduced"
-        console.print(f"\n[bold cyan]Building {s} ({label})[/bold cyan]")
+        console.print(f"\n[bold cyan]Building {s}[/bold cyan]")
         df = build_perturbed_dataframe(
             s,
             seed=seed,
             type_restricted_false_positives=not no_type_restrict,
-            keep_rare_classes=rare_classes,
         )
-        path = _csv_path(s, out, rare_classes)
+        path = _csv_path(s, out)
         df.to_csv(path, index=False)
         _print_stats_table(df, s)
         console.print(f"[green]Wrote[/green] {path} ([dim]{len(df)} rows[/dim])")
@@ -170,18 +156,13 @@ def build(
 @app.command()
 def stats(
     split: Split = typer.Argument(Split.all, help="Which split's CSV to summarize."),
-    rare_classes: bool = typer.Option(
-        False,
-        "--rare-classes",
-        help="Read the _full variant (built with --rare-classes).",
-    ),
     out: Path = typer.Option(
         DEFAULT_OUTPUT_DIR, "--out", "-o", help="Where the CSVs live.",
     ),
 ) -> None:
     """Per-perturbation distribution from already-built CSV(s)."""
     for s in _resolve_splits(split):
-        df = _load_built_csv(s, out, keep_rare_classes=rare_classes)
+        df = _load_built_csv(s, out)
         _print_stats_table(df, s)
 
 
@@ -196,17 +177,12 @@ def peek(
         None, "--label", "-l", help="Filter by label (0 = wrong, 1 = correct).",
     ),
     seed: int = typer.Option(0, "--seed", help="Random seed for sampling."),
-    rare_classes: bool = typer.Option(
-        False,
-        "--rare-classes",
-        help="Read the _full variant (built with --rare-classes).",
-    ),
     out: Path = typer.Option(
         DEFAULT_OUTPUT_DIR, "--out", "-o", help="Where the CSVs live.",
     ),
 ) -> None:
     """Print a few random sample rows from a built CSV (for eyeballing)."""
-    df = _load_built_csv(split.value, out, keep_rare_classes=rare_classes)
+    df = _load_built_csv(split.value, out)
 
     filtered = df
     if perturbation is not None:

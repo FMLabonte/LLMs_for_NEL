@@ -117,13 +117,10 @@ The perturbation types you can filter on (see [PERTURBATIONS.md](PERTURBATIONS.m
 
 | Perturbation | Label | What changes |
 |---|---|---|
-| `gold` | 1 | unchanged BioRED relation |
-| `label_flip` | 0 | relation type changed to a different one |
-| `direction_swap` | 0 | entity_A and entity_B swapped (skipped for symmetric relations: `Association`, `Comparison`) |
-| `fp_co_related` | 0 | entity_B replaced with another in-abstract entity that has its own relation elsewhere |
-| `fp_co_standalone` | 0 | entity_B replaced with an in-abstract entity that has no relations |
-| `fp_external` | 0 | entity_B replaced with an entity not in the abstract |
-| `false_negative` | 0 | claimed `NoRelation` for a relation that actually exists |
+| `gold` | 1 | a true (entity_pair, relation) example; includes `NoRelation` golds (genuinely-unrelated pairs) |
+| `label_flip` | 0 | relation type changed to another valid class over the 4-class matrix (includes to/from `NoRelation`) |
+| `direction_swap` | 0 | entity_A and entity_B swapped (only `Positive_Correlation`, `Negative_Correlation`) |
+| `fp_external` | 0 | entity_B replaced with an entity not in the abstract (the in-abstract fp families were dropped; they overlapped the `NoRelation` -> relation flips) |
 
 ### How to add new commands
 
@@ -172,18 +169,16 @@ After saving, `python cli.py --help` lists the new command automatically. Run `p
 
 ## Perturbation taxonomy
 
-The canonical list of perturbation types, with stable names and the LLM error each one targets, lives in [PERTURBATIONS.md](PERTURBATIONS.md). A typeset PDF version of the same content is at [docs/perturbations.pdf](docs/perturbations.pdf) (built from [docs/perturbations.tex](docs/perturbations.tex) with `pdflatex`).
+The canonical list of perturbation types, with stable names and the LLM error each one targets, lives in [PERTURBATIONS.md](PERTURBATIONS.md) (single source of truth).
 
-Treat the names listed there (`gold`, `label_flip`, `direction_swap`, `fp_co_related`, `fp_co_standalone`, `fp_external`, `false_negative`) as the stable vocabulary used in CSV columns, metric slices, and reports.
+Treat the names listed there (`gold`, `label_flip`, `direction_swap`, `fp_external`) as the stable vocabulary used in CSV columns, metric slices, and reports. The four gold classes are `Association`, `Positive_Correlation`, `Negative_Correlation`, and `NoRelation`.
 
 ## Repository structure
 
 ```
 LLMs_for_NEL/
 ├── README.md                        ← you are here
-├── PERTURBATIONS.md                 ← canonical perturbation taxonomy (markdown)
-├── docs/perturbations.tex           ← same taxonomy, LaTeX source
-├── docs/perturbations.pdf           ← same taxonomy, typeset PDF (with worked examples)
+├── PERTURBATIONS.md                 ← canonical perturbation taxonomy (single source of truth)
 ├── cpu-env.yml                      ← conda environment spec
 ├── pubtator_parser.py               ← raw PubTator -> 3 DataFrames (meta, anns, rels)
 ├── Data/
