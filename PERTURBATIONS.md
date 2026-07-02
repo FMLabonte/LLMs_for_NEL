@@ -21,7 +21,7 @@ This is the default the filter is trained and evaluated on. The motivation and p
 | Name | Family | Mutates | Why | Label | Applies to |
 |---|---|---|---|---|---|
 | `gold` | positive | nothing | establishes the positive class | 1 | all four classes, incl. `NoRelation` |
-| `label_flip` | label | relation type, swapped to another valid class over the 4-class matrix (one row per valid alternative) | LLM picks the wrong relation type from a plausible menu (now incl. claiming a relation where there is none, and dropping a real one) | 0 | all four; only skip is specific → `Association` |
+| `label_flip` | label | relation type, swapped to another class over the full 4-class matrix (one row per alternative) | LLM picks the wrong relation type from a plausible menu (incl. claiming a relation where there is none, dropping a real one, or weakening a correlation to `Association`) | 0 | all four; every off-diagonal cell, no skip |
 | `direction_swap` | direction | swap `entity_A` and `entity_B`, keep relation type | LLM reverses causality (e.g. "gene up-regulates compound" vs "compound up-regulates gene") | 0 | `Positive_Correlation`, `Negative_Correlation` only |
 | `fp_external` | false positive | replace `entity_B` with an entity that is not in the abstract at all (drawn from the corpus pool) | the model should reject a relation to an entity the abstract never mentions | 0 | the three relation classes (not `NoRelation` golds) |
 
@@ -32,22 +32,20 @@ Two things were removed 2026-06-10 because the 4-class scheme made them redundan
 
 ## Per-perturbation notes
 
-### `label_flip` walks the 4-class matrix; the only skip is specific → `Association`
+### `label_flip` walks the full 4-class matrix (every off-diagonal cell)
 
-For each gold we emit one `label_flip` row per *valid* alternative class. A flip is valid when the new label is actually wrong for the pair. The single entailment in the taxonomy is **specific → `Association`**: a positive or negative correlation between two entities still means they are *associated*, so flipping a correlation to `Association` is still true, i.e. label noise, not a usable negative. We therefore never use `Association` as a `label_flip` target for a specific type (see `IMPLIED_RELATIONS` in `perturbations.py`). `NoRelation` implies nothing and is implied by nothing, so it flips freely in both directions.
+For each gold we emit one `label_flip` row per alternative class, over every off-diagonal cell of the 4-class matrix, with no skip. A positive/negative correlation does entail a generic `Association`, so on the gold text a specific → `Association` flip would be technically true; but the synthetic abstract is written by an LLM that may soften a correlation down to plain association-level language, making the weaker label a genuine mismatch the QC model must learn to catch. Keeping these cells also trains the model to separate `Association` from the specific correlations instead of collapsing them. So `IMPLIED_RELATIONS` in `perturbations.py` is empty: nothing is skipped.
 
-The 4-class matrix (✓ = valid negative, ✗ = skip, `self` on the diagonal):
+The 4-class matrix (✓ = valid negative, `self` on the diagonal):
 
 | gold ↓ \ to → | `Association` | `Positive_Correlation` | `Negative_Correlation` | `NoRelation` | # valid |
 |---|:---:|:---:|:---:|:---:|:---:|
 | `Association` | self | ✓ | ✓ | ✓ | 3 |
-| `Positive_Correlation` | ✗ | self | ✓ | ✓ | 2 |
-| `Negative_Correlation` | ✗ | ✓ | self | ✓ | 2 |
+| `Positive_Correlation` | ✓ | self | ✓ | ✓ | 3 |
+| `Negative_Correlation` | ✓ | ✓ | self | ✓ | 3 |
 | `NoRelation` | ✓ | ✓ | ✓ | self | 3 |
 
-So an `Association` gold produces 3 flips (to both correlations and `NoRelation`); each correlation gold produces 2 (the other correlation and `NoRelation`; `Association` skipped); a `NoRelation` gold produces 3 (the three real relations). The relation → `NoRelation` column is what used to be the separate `false_negative` perturbation; the `NoRelation` → relation row is new (a genuine non-relation claimed to be a real relation).
-
-This refines the earlier behavior, which flipped each gold to every other kept type. The skip, the move to a 4-class label space with `NoRelation` as a full participant, and dropping the rare classes (which retired the `Comparison` edge case) were all introduced together.
+So every gold produces 3 `label_flip` rows (the three other classes). The relation → `NoRelation` column is what used to be the separate `false_negative` perturbation; the `NoRelation` → relation row claims a relation where there is none; the specific → `Association` cells are the weakened-label negatives described above.
 
 ### `direction_swap` applies only to `Positive_Correlation` and `Negative_Correlation`
 
@@ -74,8 +72,8 @@ We track macro-F1 per `perturbation` value, so the per-type difficulty ranking f
 ## Sampling & balance rules
 
 - `direction_swap` is restricted to `Positive_Correlation` and `Negative_Correlation` (see above).
-- `label_flip` walks the 4-class matrix: one row per valid alternative class per gold, skipping only specific → `Association` (still true; see above). No random pick.
-- **`NoRelation` gold sampling:** candidates are all co-mentioned entity pairs with no relation of any type. There are ~7x more of these than real relations, and they sit much farther apart in the text, so an unfiltered sample would teach the model "far apart = no relation". When `n_norelation_cap` is set we **distance-match**: each candidate is accepted with probability proportional to how common its in-abstract character gap is among the real related pairs, until the cap is hit (seeded; see `_norelation_gold_pairs`). Default cap `match_gold` = the per-split real-relation count, giving a 50/50 real-vs-`NoRelation` gold split.
+- `label_flip` walks the full 4-class matrix: one row per alternative class per gold, every off-diagonal cell, no skip (see above). No random pick.
+- **`NoRelation` gold sampling:** candidates are all co-mentioned entity pairs with no relation of any type. There are ~7x more of these than real relations, and they sit much farther apart in the text, so an unfiltered sample would teach the model "far apart = no relation". When `n_norelation_cap` is set we **distance-match**: each candidate is accepted with probability proportional to how common its in-abstract distance (sentence gap by default) is among the real related pairs, until the cap is hit (seeded; see `_norelation_gold_pairs`). Default cap `match_gold` = the per-split real-relation count, giving a 50/50 real-vs-`NoRelation` gold split.
 - `fp_external` samples up to `FP_EXTERNAL_MAX_PER_GOLD` (default 5) candidates per relation gold from the corpus pool (entities not in the abstract), since enumerating the full corpus would blow up the pool. `NoRelation` golds get no FP samples.
 - **FP balance cap:** the per-split count of each FP type is capped at the per-split `label_flip` count. If the FP candidate pool exceeds the cap, we randomly downsample (seeded) to exactly the cap; if it is smaller (common now that `NoRelation` golds inflate `label_flip`), every candidate is kept. If a later experiment shows a particular FP type is the hardest to detect, we lift its cap by raising `FP_EXTERNAL_MAX_PER_GOLD` or by generating more candidates per gold.
 - False-positive sampling is **type-restricted by default**: only `(entity_type_a, entity_type_b)` pairs that appear in real BioRED relations are eligible. This avoids implausible Species/CellLine pairings the model would learn to reject trivially. `--no-type-restrict` disables.
@@ -102,7 +100,7 @@ The top 3 cover ~96-97% of every split. `Drug_Interaction` and `Conversion` have
 
 `NoRelation` is a first-class gold (label 1), not just a perturbation target. We sample co-mentioned entity pairs that have **no annotated relation of any type** and emit them as `gold` with `relation_type = NoRelation, label = 1`, so the filter learns that "no relation" is a valid ground truth, not an absence. These golds then take part in `label_flip` like any other class (flipped to the three real relations).
 
-In real BioRED there are ~7x more such pairs than annotated relations (~26.7k vs ~4k in train), and they sit much farther apart in the text. We therefore distance-match and cap them: see the `NoRelation` gold sampling rule under [Sampling & balance rules](#sampling--balance-rules). Implemented 2026-06-10 (was issue #7). The cap size and the distance metric (character / token / sentence) are configurable via `n_norelation_cap` and `norelation_distance_metric`; the pipeline defaults to the character gap with the `match_gold` cap.
+In real BioRED there are ~7x more such pairs than annotated relations (~26.7k vs ~4k in train), and they sit much farther apart in the text. We therefore distance-match and cap them: see the `NoRelation` gold sampling rule under [Sampling & balance rules](#sampling--balance-rules). Implemented 2026-06-10 (was issue #7). The cap size and the distance metric are configurable via `n_norelation_cap` and `norelation_distance_metric`; the pipeline defaults to the sentence gap with the `match_gold` cap (character gap is also supported; token is case-study-only).
 
 ## One-thing-at-a-time spin-off datasets
 

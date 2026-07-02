@@ -43,7 +43,7 @@ def build_perturbed_dataframe(
     seed: int = 42,
     type_restricted_false_positives: bool = True,
     n_norelation_cap: int | str | None = "match_gold",
-    norelation_distance_metric: str = "char",
+    norelation_distance_metric: str = "sentence",
 ) -> pd.DataFrame:
     """Build the perturbed dataset for one split, return as DataFrame.
 
@@ -70,7 +70,8 @@ def build_perturbed_dataframe(
         keeps every candidate (~7x the positives, unbalanced).
     norelation_distance_metric
         Distance used to match NoRelation golds to the real related pairs.
-        "char" (default) is the in-abstract character gap.
+        "sentence" (default, Frederik's preference) counts sentence terminators
+        between the closest mentions; "char" is the in-abstract character gap.
 
     Returns
     -------

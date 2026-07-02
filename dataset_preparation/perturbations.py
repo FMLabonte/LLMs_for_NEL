@@ -7,10 +7,10 @@ co-mention pairs, distance-matched and capped). From each gold we produce
 perturbed variants used as negative training examples (label 0):
 
   gold              - a true (entity_pair, relation) example, incl. NoRelation
-  label_flip        - swap the relation type for another valid class over the
-                      4-class matrix. The only skip is specific -> Association
-                      (still true). Covers relation -> NoRelation (formerly the
-                      separate false_negative) and NoRelation -> relation.
+  label_flip        - swap the relation type for another class over the full
+                      4-class matrix (every off-diagonal cell, no skip). Covers
+                      relation -> NoRelation (formerly the separate false_negative),
+                      NoRelation -> relation, and specific -> Association.
   direction_swap    - swap entity_A and entity_B (only Pos/Neg_Correlation)
   fp_external       - replace entity_B with an entity not in the abstract
 
@@ -70,24 +70,15 @@ DIRECTIONAL_RELATIONS: set[str] = {
     "Negative_Correlation",
 }
 
-# A label_flip is only a usable NEGATIVE when the swapped relation type is
-# actually wrong for the pair. Every SPECIFIC BioRED relation type implies the
-# generic Association: a Bind, Cotreatment, Drug_Interaction, Conversion, or a
-# positive/negative correlation between two entities still means they are
-# associated. So flipping any specific type to Association produces a claim that is
-# still true, not a usable negative. We therefore never use Association as a
-# label_flip target. Mapping: gold relation type -> set of weaker types it implies
-# (and must not be flipped to).
-#
-# Association itself is NOT a key: flipping it to a specific type asserts a
-# direction/mechanism the annotators did not, which is a defensible negative, so we
-# keep those. The only entailment in BioRED's otherwise flat taxonomy is
-# "specific type -> Association"; there is no specific -> specific entailment.
-# The mapping is keyed over all BioRED relation types for completeness, although
-# only the top-3 are used (the rare classes are dropped from the build).
-IMPLIED_RELATIONS: dict[str, set[str]] = {
-    rel: {"Association"} for rel in BIORED_RELATION_TYPES if rel != "Association"
-}
+# label_flip uses every off-diagonal cell of the 4-class matrix, including
+# specific -> Association. A Positive/Negative correlation does entail a generic
+# Association, so on the gold text that flip would be technically true; but the
+# synthetic abstract is written by an LLM that may soften a correlation down to
+# plain association-level language, making the weaker label a genuine mismatch the
+# QC model must learn to catch. Keeping these cells trains the model to separate
+# Association from the specific correlations (the hardest distinction) instead of
+# collapsing them. No cell is skipped.
+IMPLIED_RELATIONS: dict[str, set[str]] = {}
 
 NO_RELATION_LABEL = "NoRelation"
 
@@ -255,6 +246,29 @@ def _char_gap(spans_a: list, spans_b: list) -> int | None:
     return best
 
 
+def _sentence_gap(spans_a: list, spans_b: list, text: str) -> int | None:
+    """Smallest sentence gap between the closest mentions of two entities.
+
+    Mirrors ``_char_gap`` but, for each mention pair, counts the sentence
+    terminators (. ! ?) in the text segment separating them and takes the minimum.
+    0 means the two entities are mentioned in the same sentence. ``text`` must be
+    in the same offset coordinate system as the spans (title + " " + abstract).
+    """
+    best = None
+    for sa, ea in spans_a:
+        for sb, eb in spans_b:
+            if ea <= sb:
+                seg = text[ea:sb]
+            elif eb <= sa:
+                seg = text[eb:sa]
+            else:
+                seg = ""
+            g = sum(seg.count(c) for c in ".!?")
+            if best is None or g < best:
+                best = g
+    return best
+
+
 def _norelation_gold_pairs(
     anns: pd.DataFrame,
     rels: pd.DataFrame,
@@ -262,6 +276,7 @@ def _norelation_gold_pairs(
     rng: random.Random,
     cap: int | None = None,
     metric: str = "char",
+    text_by_pmid: dict[str, str] | None = None,
 ) -> list[tuple[str, str, str]]:
     """Genuine NoRelation golds: unordered entity pairs co-mentioned in an
     abstract that have NO relation of ANY type (implicit negatives).
@@ -270,17 +285,24 @@ def _norelation_gold_pairs(
     in the text than real related pairs, so an unfiltered sample would teach the
     model "far apart = no relation". When ``cap`` is set we therefore distance-
     match: each candidate is accepted with probability proportional to how common
-    its character gap is among the real related pairs (the "mimic the distance"
-    rule). ``metric`` is char only in the pipeline; the token/sentence variants
-    live in a separate case study.
+    its gap is among the real related pairs (the "mimic the distance" rule).
+    ``metric`` is "char" or "sentence" ("sentence" needs ``text_by_pmid``); the
+    token variant is still case-study-only.
 
     Returns [(pmid, id_a, id_b), ...]. Deterministic for a fixed ``rng``.
     """
-    if metric != "char":
+    if metric not in ("char", "sentence"):
         raise NotImplementedError(
             f"NoRelation distance metric {metric!r} not supported in the pipeline "
-            f"(char only; token/sentence are case-study-only)."
+            f"(char or sentence; token is case-study-only)."
         )
+    if metric == "sentence" and not text_by_pmid:
+        raise ValueError("metric='sentence' requires text_by_pmid (title + ' ' + abstract).")
+
+    def _gap(pmid, sa, sb):
+        return _char_gap(sa, sb) if metric == "char" else _sentence_gap(sa, sb, text_by_pmid[pmid])
+    binw = 10 if metric == "char" else 1
+
     from collections import Counter, defaultdict
     from itertools import combinations
 
@@ -302,7 +324,7 @@ def _norelation_gold_pairs(
         if r.relation_type in gold_set:
             sa, sb = spans.get((r.pmid, r.id_1)), spans.get((r.pmid, r.id_2))
             if sa and sb:
-                g = _char_gap(sa, sb)
+                g = _gap(r.pmid, sa, sb)
                 if g is not None:
                     target_gaps.append(g)
 
@@ -312,14 +334,13 @@ def _norelation_gold_pairs(
         for a, b in combinations(sorted(set(ents)), 2):
             if (a, b) in rp:
                 continue
-            g = _char_gap(spans[(pmid, a)], spans[(pmid, b)])
+            g = _gap(pmid, spans[(pmid, a)], spans[(pmid, b)])
             if g is not None:
                 candidates.append((pmid, a, b, g))
 
     if cap is None or len(candidates) <= cap:
         return [(p, a, b) for (p, a, b, _g) in candidates]
 
-    binw = 10
     tc = Counter(g // binw for g in target_gaps) if target_gaps else Counter()
     maxc = max(tc.values()) if tc else 1
     order = candidates[:]
@@ -414,7 +435,7 @@ def build_training_samples(
     type_restricted_false_positives: bool = True,
     gold_relation_types: list[str] | None = None,
     n_norelation_cap: int | None = None,
-    norelation_distance_metric: str = "char",
+    norelation_distance_metric: str = "sentence",
 ) -> list[TrainingSample]:
     """Build the full training set for one split (4-class scheme).
 
@@ -422,11 +443,11 @@ def build_training_samples(
     BioRED relations) plus NoRelation (genuinely-unrelated co-mention pairs,
     distance-matched and capped). Per gold we emit:
       - 1 gold sample (label 1)
-      - one label_flip per valid alternative class (label 0). NoRelation is a full
-        participant: relation golds may flip TO NoRelation (what used to be the
-        separate false_negative perturbation), and NoRelation golds flip to the
-        three relations. The only skip is specific -> Association (still true; see
-        IMPLIED_RELATIONS).
+      - one label_flip per alternative class (label 0), every off-diagonal cell of
+        the 4-class matrix, no skip. NoRelation is a full participant: relation golds
+        may flip TO NoRelation (what used to be the separate false_negative
+        perturbation), NoRelation golds flip to the three relations, and specific
+        types flip to Association (see IMPLIED_RELATIONS for why these are kept).
       - 1 direction_swap (only Pos/Neg_Correlation; never NoRelation)
       - fp_external (entity_B drawn from outside the abstract), globally downsampled
         to the per-split label_flip count. NoRelation golds get NO fp samples. The
@@ -462,9 +483,11 @@ def build_training_samples(
 
     # NoRelation golds: genuine negatives (co-mention pairs with no relation),
     # distance-matched to the real related pairs and capped.
+    text_by_pmid = {p: f"{t} {a}" for p, t, a in zip(meta["pmid"], meta["title"], meta["abstract"])}
     norel_pairs = _norelation_gold_pairs(
         anns, rels, gold_set, nr_rng,
         cap=n_norelation_cap, metric=norelation_distance_metric,
+        text_by_pmid=text_by_pmid,
     )
 
     samples: list[TrainingSample] = []
@@ -512,11 +535,11 @@ def build_training_samples(
 
         samples.append(_make(pmid, a_id, info_a, rel_type, b_id, info_b, 1, "gold"))
 
-        # label_flip over the 4-class matrix: one row per valid alternative class,
-        # skipping any type the gold already implies (specific -> Association is
-        # still true, so not a valid negative). See IMPLIED_RELATIONS. This also
-        # covers relation -> NoRelation (the old false_negative) and the new
-        # NoRelation -> {Association, Pos, Neg} flips.
+        # label_flip over the 4-class matrix: one row per alternative class, every
+        # off-diagonal cell. IMPLIED_RELATIONS is empty (no cell skipped); the hook
+        # stays so a skip set can be reintroduced if ever needed. This covers
+        # relation -> NoRelation (the old false_negative), NoRelation -> {Association,
+        # Pos, Neg}, and specific -> Association.
         implied = IMPLIED_RELATIONS.get(rel_type, frozenset())
         for alt in flip_targets:
             if alt == rel_type or alt in implied:
