@@ -1,26 +1,25 @@
 """
 Phase 1: Perturbation generators for the quality-filter classifier.
 
-Given a gold BioRED relation, produce perturbed variants used as negative
-training examples. Seven perturbation labels (one positive, six negative):
+Four gold classes (label 1): Association, Positive_Correlation,
+Negative_Correlation (from BioRED relations) and NoRelation (genuinely-unrelated
+co-mention pairs, distance-matched and capped). From each gold we produce
+perturbed variants used as negative training examples (label 0):
 
-  gold              - unchanged BioRED relation (positive)
-  label_flip        - swap relation type for a different one (ALL alternatives
-                      enumerated per gold, not one at random)
-  direction_swap    - swap entity_A and entity_B (only for directional rels)
-  fp_co_related     - replace entity_B with another in-abstract entity that
-                      has its own annotated relation elsewhere
-  fp_co_standalone  - replace entity_B with another in-abstract entity that
-                      has no annotated relations
+  gold              - a true (entity_pair, relation) example, incl. NoRelation
+  label_flip        - swap the relation type for another class over the full
+                      4-class matrix (every off-diagonal cell, no skip). Covers
+                      relation -> NoRelation (formerly the separate false_negative),
+                      NoRelation -> relation, and specific -> Association.
+  direction_swap    - swap entity_A and entity_B (only Pos/Neg_Correlation)
   fp_external       - replace entity_B with an entity not in the abstract
-  false_negative    - claim NoRelation for a triple that does have a relation
 
-All perturbations operate on the (entity_pair, relation_label) tuple ONLY.
-The abstract text is never modified.
+The 5 rare BioRED relation types are always dropped (the --rare-classes ablation
+was removed 2026-06-10). All perturbations operate on the (entity_pair,
+relation_label) tuple ONLY; the abstract text is never modified.
 
 Balance rule: the per-split count of each FP type is capped at the per-split
-label_flip count, so all six perturbation types end up in roughly the same
-order of magnitude. Decided 2026-05-21.
+label_flip count. Decided 2026-05-21.
 
 See PERTURBATIONS.md (root of repo) for the full taxonomy with rationale,
 worked examples, and design decisions.
@@ -38,13 +37,8 @@ PerturbationType = Literal[
     "gold",
     "label_flip",
     "direction_swap",
-    "fp_co_related",
-    "fp_co_standalone",
     "fp_external",
-    "false_negative",
 ]
-
-FpSubType = Literal["co_related", "co_standalone", "external"]
 
 # Relation types observed in BioRED gold. Keep this list authoritative;
 # build_dataset.py asserts that every observed relation type is in here.
@@ -75,6 +69,16 @@ DIRECTIONAL_RELATIONS: set[str] = {
     "Positive_Correlation",
     "Negative_Correlation",
 }
+
+# label_flip uses every off-diagonal cell of the 4-class matrix, including
+# specific -> Association. A Positive/Negative correlation does entail a generic
+# Association, so on the gold text that flip would be technically true; but the
+# synthetic abstract is written by an LLM that may soften a correlation down to
+# plain association-level language, making the weaker label a genuine mismatch the
+# QC model must learn to catch. Keeping these cells trains the model to separate
+# Association from the specific correlations (the hardest distinction) instead of
+# collapsing them. No cell is skipped.
+IMPLIED_RELATIONS: dict[str, set[str]] = {}
 
 NO_RELATION_LABEL = "NoRelation"
 
@@ -118,6 +122,30 @@ class TrainingSample:
         }
 
 
+def _split_multi_id_annotations(anns: pd.DataFrame) -> pd.DataFrame:
+    """Split BioRED annotations whose ``mesh_id`` is a comma-separated ID list.
+
+    BioRED tags a single text span that refers to several normalized concepts with
+    all of their IDs in one annotation, e.g. ``mesh_id = "D002289,D055752"`` for the
+    span "squamous- and small-cell lung cancer". Relations always reference the
+    individual IDs (verified: no relation endpoint contains a comma), so without
+    splitting, those individual IDs never match an annotation and about 8% of gold
+    relations get silently dropped. We explode such annotations into one row per ID,
+    keeping the shared mention / entity_type / offsets.
+
+    Comma is the only multi-ID separator. Other punctuation that appears in a single
+    id (e.g. ``|`` in a SequenceVariant id like ``c|DEL|1314_1328|``) is left
+    untouched.
+    """
+    if anns.empty or "mesh_id" not in anns.columns:
+        return anns
+    out = anns.copy()
+    out["mesh_id"] = out["mesh_id"].apply(
+        lambda v: [s.strip() for s in str(v).split(",")] if pd.notna(v) else [v]
+    )
+    return out.explode("mesh_id", ignore_index=True)
+
+
 def _build_entity_lookup(
     anns: pd.DataFrame,
 ) -> dict[tuple[str, str], dict]:
@@ -143,8 +171,8 @@ def _real_pairs_per_paper(
     """For each pmid, the set of entity-id pairs that DO have a gold relation
     (stored in both orders so membership tests are direction-agnostic).
 
-    Built from the full rels DataFrame, including rare-class relations, so an
-    fp candidate is never an entity pair that BioRED annotated with ANY label.
+    Built from the full rels DataFrame, including rare-class relations, so a
+    NoRelation candidate is never an entity pair that BioRED annotated with ANY label.
     """
     out: dict[str, set[tuple[str, str]]] = {}
     for pmid, grp in rels.groupby("pmid"):
@@ -153,22 +181,6 @@ def _real_pairs_per_paper(
             pairs.add((r["id_1"], r["id_2"]))
             pairs.add((r["id_2"], r["id_1"]))
         out[pmid] = pairs
-    return out
-
-
-def _entities_with_relations_per_paper(
-    rels: pd.DataFrame,
-) -> dict[str, set[str]]:
-    """For each pmid, the set of entity IDs that participate in at least one
-    annotated relation. Used to distinguish fp_co_related from fp_co_standalone.
-
-    Built from the full rels DataFrame so a rare-class-only entity is still
-    correctly classified as having relations.
-    """
-    out: dict[str, set[str]] = {}
-    for pmid, grp in rels.groupby("pmid"):
-        ids = set(grp["id_1"]).union(set(grp["id_2"]))
-        out[pmid] = ids
     return out
 
 
@@ -210,6 +222,147 @@ def _build_corpus_pool(
 
 
 # ---------------------------------------------------------------------------
+# NoRelation gold pairs (genuine negatives, distance-matched)
+# ---------------------------------------------------------------------------
+
+def _char_gap(spans_a: list, spans_b: list) -> int | None:
+    """Smallest character gap between the closest mentions of two entities.
+
+    Each entity may be mentioned several times; we take the minimum gap over all
+    mention pairs (0 if any two mentions overlap). Offsets share one coordinate
+    system per abstract, so raw start/end are enough.
+    """
+    best = None
+    for sa, ea in spans_a:
+        for sb, eb in spans_b:
+            if ea <= sb:
+                g = sb - ea
+            elif eb <= sa:
+                g = sa - eb
+            else:
+                g = 0
+            if best is None or g < best:
+                best = g
+    return best
+
+
+def _sentence_gap(spans_a: list, spans_b: list, text: str) -> int | None:
+    """Smallest sentence gap between the closest mentions of two entities.
+
+    Mirrors ``_char_gap`` but, for each mention pair, counts the sentence
+    terminators (. ! ?) in the text segment separating them and takes the minimum.
+    0 means the two entities are mentioned in the same sentence. ``text`` must be
+    in the same offset coordinate system as the spans (title + " " + abstract).
+    """
+    best = None
+    for sa, ea in spans_a:
+        for sb, eb in spans_b:
+            if ea <= sb:
+                seg = text[ea:sb]
+            elif eb <= sa:
+                seg = text[eb:sa]
+            else:
+                seg = ""
+            g = sum(seg.count(c) for c in ".!?")
+            if best is None or g < best:
+                best = g
+    return best
+
+
+def _norelation_gold_pairs(
+    anns: pd.DataFrame,
+    rels: pd.DataFrame,
+    gold_set: set[str],
+    rng: random.Random,
+    cap: int | None = None,
+    metric: str = "char",
+    text_by_pmid: dict[str, str] | None = None,
+) -> list[tuple[str, str, str]]:
+    """Genuine NoRelation golds: unordered entity pairs co-mentioned in an
+    abstract that have NO relation of ANY type (implicit negatives).
+
+    There are ~7x more of these than positives, and they sit much farther apart
+    in the text than real related pairs, so an unfiltered sample would teach the
+    model "far apart = no relation". When ``cap`` is set we therefore distance-
+    match: each candidate is accepted with probability proportional to how common
+    its gap is among the real related pairs (the "mimic the distance" rule).
+    ``metric`` is "char" or "sentence" ("sentence" needs ``text_by_pmid``); the
+    token variant is still case-study-only.
+
+    Returns [(pmid, id_a, id_b), ...]. Deterministic for a fixed ``rng``.
+    """
+    if metric not in ("char", "sentence"):
+        raise NotImplementedError(
+            f"NoRelation distance metric {metric!r} not supported in the pipeline "
+            f"(char or sentence; token is case-study-only)."
+        )
+    if metric == "sentence" and not text_by_pmid:
+        raise ValueError("metric='sentence' requires text_by_pmid (title + ' ' + abstract).")
+
+    def _gap(pmid, sa, sb):
+        return _char_gap(sa, sb) if metric == "char" else _sentence_gap(sa, sb, text_by_pmid[pmid])
+    binw = 10 if metric == "char" else 1
+
+    from collections import Counter, defaultdict
+    from itertools import combinations
+
+    spans: dict[tuple[str, str], list] = defaultdict(list)
+    for r in anns.itertuples(index=False):
+        spans[(r.pmid, r.mesh_id)].append((int(r.start), int(r.end)))
+
+    ents_by_pmid: dict[str, list] = defaultdict(list)
+    seen: set[tuple[str, str]] = set()
+    for (pmid, mid) in spans:
+        if (pmid, mid) not in seen:
+            seen.add((pmid, mid))
+            ents_by_pmid[pmid].append(mid)
+
+    real = _real_pairs_per_paper(rels)  # both orders, ANY relation type
+
+    target_gaps: list[int] = []
+    for r in rels.itertuples(index=False):
+        if r.relation_type in gold_set:
+            sa, sb = spans.get((r.pmid, r.id_1)), spans.get((r.pmid, r.id_2))
+            if sa and sb:
+                g = _gap(r.pmid, sa, sb)
+                if g is not None:
+                    target_gaps.append(g)
+
+    candidates: list[tuple[str, str, str, int]] = []
+    for pmid, ents in ents_by_pmid.items():
+        rp = real.get(pmid, set())
+        for a, b in combinations(sorted(set(ents)), 2):
+            if (a, b) in rp:
+                continue
+            g = _gap(pmid, spans[(pmid, a)], spans[(pmid, b)])
+            if g is not None:
+                candidates.append((pmid, a, b, g))
+
+    if cap is None or len(candidates) <= cap:
+        return [(p, a, b) for (p, a, b, _g) in candidates]
+
+    tc = Counter(g // binw for g in target_gaps) if target_gaps else Counter()
+    maxc = max(tc.values()) if tc else 1
+    order = candidates[:]
+    rng.shuffle(order)
+    chosen: list[tuple[str, str, str]] = []
+    for (pmid, a, b, gap) in order:
+        if len(chosen) >= cap:
+            break
+        if rng.random() < tc.get(gap // binw, 0) / maxc:
+            chosen.append((pmid, a, b))
+    if len(chosen) < cap:  # top up with the remaining closest-to-target candidates
+        taken = set(chosen)
+        rest = [(p, a, b, gp) for (p, a, b, gp) in order if (p, a, b) not in taken]
+        rest.sort(key=lambda x: tc.get(x[3] // binw, 0), reverse=True)
+        for (p, a, b, _gp) in rest:
+            if len(chosen) >= cap:
+                break
+            chosen.append((p, a, b))
+    return chosen[:cap]
+
+
+# ---------------------------------------------------------------------------
 # Perturbation: Direction swap
 # ---------------------------------------------------------------------------
 
@@ -224,87 +377,50 @@ def direction_swap_is_meaningful(relation_type: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Perturbation: False positive (3 sub-types)
+# Perturbation: False positive (external only)
 # ---------------------------------------------------------------------------
 
-def sample_fp_candidates(
-    pmid: str,
+def sample_external_fp_candidates(
     entity_a_id: str,
     entity_a_info: dict,
     pmid_anns: pd.DataFrame,
-    real_pairs: set[tuple[str, str]],
-    entities_with_relations: set[str],
     plausible_type_pairs: set[tuple[str, str]],
     corpus_pool: dict[str, dict],
     rng: random.Random,
-    sub_type: FpSubType,
     type_restricted: bool = True,
     external_max_per_gold: int = FP_EXTERNAL_MAX_PER_GOLD,
 ) -> list[tuple[str, dict]]:
-    """Return all eligible entity_B candidates for a false-positive pair,
-    anchored on a fixed entity_A.
+    """Eligible entity_B candidates for an external false positive, anchored on a
+    fixed entity_A: entities drawn from the corpus that are NOT in this abstract.
 
-    For co_related and co_standalone the in-abstract pool is small (typically
-    < 20 entities) so we return everything. For external the corpus pool is
-    huge; we draw at most external_max_per_gold candidates so the global FP
-    pool stays tractable before the per-split downsample.
+    The corpus pool is huge, so we draw at most external_max_per_gold candidates
+    per gold to keep the global FP pool tractable before the per-split downsample.
+    (Only fp_external survives. The in-abstract families fp_co_related and
+    fp_co_standalone were dropped 2026-06-10: their entity_B is co-mentioned, so the
+    pair has no relation and is itself a NoRelation candidate, which made those rows
+    duplicate the NoRelation -> relation label_flips. fp_external's entity_B is not in
+    the abstract, so it can never collide.)
     """
-    if sub_type == "external":
-        in_abstract_ids = (
-            set(pmid_anns["mesh_id"].unique())
-            if pmid_anns is not None and len(pmid_anns) > 0
-            else set()
-        )
-        candidates: list[tuple[str, dict]] = []
-        for b_id, b_info in corpus_pool.items():
-            if b_id == entity_a_id:
-                continue
-            if b_id in in_abstract_ids:
-                continue
-            if type_restricted and (
-                (entity_a_info["entity_type"], b_info["entity_type"])
-                not in plausible_type_pairs
-            ):
-                continue
-            candidates.append((b_id, b_info))
-        if len(candidates) > external_max_per_gold:
-            candidates = rng.sample(candidates, external_max_per_gold)
-        return candidates
-
-    # co_related or co_standalone: candidates from this abstract
-    if pmid_anns is None or len(pmid_anns) == 0:
-        return []
-    ent_rows = (
-        pmid_anns[["mesh_id", "entity_type", "mention"]]
-        .drop_duplicates(subset=["mesh_id"])
+    in_abstract_ids = (
+        set(pmid_anns["mesh_id"].unique())
+        if pmid_anns is not None and len(pmid_anns) > 0
+        else set()
     )
-    candidates = []
-    for _, e in ent_rows.iterrows():
-        b_id = e["mesh_id"]
+    candidates: list[tuple[str, dict]] = []
+    for b_id, b_info in corpus_pool.items():
         if b_id == entity_a_id:
             continue
-        if (entity_a_id, b_id) in real_pairs:
+        if b_id in in_abstract_ids:
             continue
         if type_restricted and (
-            (entity_a_info["entity_type"], e["entity_type"])
+            (entity_a_info["entity_type"], b_info["entity_type"])
             not in plausible_type_pairs
         ):
             continue
-        has_rels = b_id in entities_with_relations
-        if sub_type == "co_related" and not has_rels:
-            continue
-        if sub_type == "co_standalone" and has_rels:
-            continue
-        candidates.append((b_id, {"mention": e["mention"], "entity_type": e["entity_type"]}))
+        candidates.append((b_id, b_info))
+    if len(candidates) > external_max_per_gold:
+        candidates = rng.sample(candidates, external_max_per_gold)
     return candidates
-
-
-# ---------------------------------------------------------------------------
-# Perturbation: False negative
-# ---------------------------------------------------------------------------
-
-def perturb_false_negative_label() -> str:
-    return NO_RELATION_LABEL
 
 
 # ---------------------------------------------------------------------------
@@ -317,44 +433,65 @@ def build_training_samples(
     rels: pd.DataFrame,
     seed: int = 42,
     type_restricted_false_positives: bool = True,
-    kept_relation_types: list[str] | None = None,
+    gold_relation_types: list[str] | None = None,
+    n_norelation_cap: int | None = None,
+    norelation_distance_metric: str = "sentence",
 ) -> list[TrainingSample]:
-    """Build the full training set for one split.
+    """Build the full training set for one split (4-class scheme).
 
-    Per gold relation we emit:
-      - 1 gold sample
-      - (|kept_relation_types| - 1) label_flip samples (every alternative kept type)
-      - 1 direction_swap sample (only for Pos/Neg_Correlation)
-      - 1 false_negative sample
-      - up to LF/N_gold fp_co_related, fp_co_standalone, fp_external samples
-        each, where LF is the per-split label_flip count and the per-gold pool
-        is generated then globally downsampled to LF rows per FP type.
+    Gold classes: Association, Positive_Correlation, Negative_Correlation (from
+    BioRED relations) plus NoRelation (genuinely-unrelated co-mention pairs,
+    distance-matched and capped). Per gold we emit:
+      - 1 gold sample (label 1)
+      - one label_flip per alternative class (label 0), every off-diagonal cell of
+        the 4-class matrix, no skip. NoRelation is a full participant: relation golds
+        may flip TO NoRelation (what used to be the separate false_negative
+        perturbation), NoRelation golds flip to the three relations, and specific
+        types flip to Association (see IMPLIED_RELATIONS for why these are kept).
+      - 1 direction_swap (only Pos/Neg_Correlation; never NoRelation)
+      - fp_external (entity_B drawn from outside the abstract), globally downsampled
+        to the per-split label_flip count. NoRelation golds get NO fp samples. The
+        in-abstract fp families were dropped 2026-06-10 (they overlapped the
+        NoRelation -> relation label_flips).
 
-    kept_relation_types restricts which gold relations are perturbed and which
-    target types label_flip can pick. Defaults to BIORED_RELATION_TYPES (the
-    full set). FP helper structures (real_pairs, entities_with_relations,
-    plausible_type_pairs) are still built from the full rels DataFrame so a
-    pair annotated only as a rare class is correctly excluded from FP candidates.
+    gold_relation_types selects which BioRED relations become golds (default the
+    top-3). n_norelation_cap caps the NoRelation golds (None = all candidates);
+    they are distance-matched via norelation_distance_metric ("char"). FP helper
+    structures are built from the full rels DataFrame so a pair annotated with ANY
+    relation is excluded from FP and NoRelation candidates.
     """
-    if kept_relation_types is None:
-        kept_relation_types = list(BIORED_RELATION_TYPES)
-    kept_set = set(kept_relation_types)
+    if gold_relation_types is None:
+        gold_relation_types = list(TOP_RELATION_TYPES)
+    gold_set = set(gold_relation_types)
+    flip_targets = list(gold_relation_types) + [NO_RELATION_LABEL]
 
     rng = random.Random(seed)
+    nr_rng = random.Random(seed + 1)  # isolated stream for NoRelation sampling
     abstract_by_pmid = dict(zip(meta["pmid"], meta["abstract"]))
 
+    # Split comma-separated multi-ID annotations so relations that reference an
+    # individual id resolve. Without this, ~8% of gold relations are dropped because
+    # the relation's id does not exact-match the composite annotation id.
+    anns = _split_multi_id_annotations(anns)
+
     entity_info = _build_entity_lookup(anns)
-    real_pairs_by_pmid = _real_pairs_per_paper(rels)
-    entities_with_rels_by_pmid = _entities_with_relations_per_paper(rels)
     plausible_type_pairs = _plausible_type_pairs(rels, entity_info)
     corpus_pool = _build_corpus_pool(entity_info)
 
     anns_by_pmid = {pmid: grp for pmid, grp in anns.groupby("pmid")}
-    kept_rels = rels[rels["relation_type"].isin(kept_set)]
+    kept_rels = rels[rels["relation_type"].isin(gold_set)]
+
+    # NoRelation golds: genuine negatives (co-mention pairs with no relation),
+    # distance-matched to the real related pairs and capped.
+    text_by_pmid = {p: f"{t} {a}" for p, t, a in zip(meta["pmid"], meta["title"], meta["abstract"])}
+    norel_pairs = _norelation_gold_pairs(
+        anns, rels, gold_set, nr_rng,
+        cap=n_norelation_cap, metric=norelation_distance_metric,
+        text_by_pmid=text_by_pmid,
+    )
 
     samples: list[TrainingSample] = []
-    fp_sub_types: tuple[FpSubType, ...] = ("co_related", "co_standalone", "external")
-    fp_pools: dict[FpSubType, list[TrainingSample]] = {s: [] for s in fp_sub_types}
+    fp_external_pool: list[TrainingSample] = []
     label_flip_count = 0
 
     def _make(
@@ -379,13 +516,16 @@ def build_training_samples(
             perturbation=perturbation,
         )
 
-    # Phase 1: per-gold emission for gold/label_flip/direction_swap/false_negative,
-    # and collection of FP candidates into per-subtype pools.
-    for _, row in kept_rels.iterrows():
-        pmid = row["pmid"]
-        a_id, b_id = row["id_1"], row["id_2"]
-        rel_type = row["relation_type"]
+    # Combined gold list: real-relation golds (get fp) then NoRelation golds (no fp).
+    gold_specs: list[tuple[str, str, str, str, bool]] = [
+        (row["pmid"], row["id_1"], row["id_2"], row["relation_type"], True)
+        for _, row in kept_rels.iterrows()
+    ]
+    gold_specs += [(pmid, a, b, NO_RELATION_LABEL, False) for (pmid, a, b) in norel_pairs]
 
+    # Phase 1: per-gold emission for gold/label_flip/direction_swap, and collection
+    # of FP candidates into per-subtype pools.
+    for pmid, a_id, b_id, rel_type, do_fp in gold_specs:
         if pmid not in abstract_by_pmid:
             continue
         info_a = entity_info.get((pmid, a_id))
@@ -395,9 +535,14 @@ def build_training_samples(
 
         samples.append(_make(pmid, a_id, info_a, rel_type, b_id, info_b, 1, "gold"))
 
-        # label_flip: one row per alternative kept type
-        for alt in kept_relation_types:
-            if alt == rel_type:
+        # label_flip over the 4-class matrix: one row per alternative class, every
+        # off-diagonal cell. IMPLIED_RELATIONS is empty (no cell skipped); the hook
+        # stays so a skip set can be reintroduced if ever needed. This covers
+        # relation -> NoRelation (the old false_negative), NoRelation -> {Association,
+        # Pos, Neg}, and specific -> Association.
+        implied = IMPLIED_RELATIONS.get(rel_type, frozenset())
+        for alt in flip_targets:
+            if alt == rel_type or alt in implied:
                 continue
             samples.append(_make(pmid, a_id, info_a, alt, b_id, info_b, 0, "label_flip"))
             label_flip_count += 1
@@ -405,36 +550,29 @@ def build_training_samples(
         if direction_swap_is_meaningful(rel_type):
             samples.append(_make(pmid, b_id, info_b, rel_type, a_id, info_a, 0, "direction_swap"))
 
-        # FP: collect all eligible candidates per subtype, downsample globally below
-        for sub in fp_sub_types:
-            candidates = sample_fp_candidates(
-                pmid=pmid,
+        # fp_external only, and only for real-relation golds (NoRelation golds get
+        # none: swapping entity_B on a non-relation just yields another non-relation).
+        if do_fp:
+            candidates = sample_external_fp_candidates(
                 entity_a_id=a_id,
                 entity_a_info=info_a,
                 pmid_anns=anns_by_pmid.get(pmid),
-                real_pairs=real_pairs_by_pmid.get(pmid, set()),
-                entities_with_relations=entities_with_rels_by_pmid.get(pmid, set()),
                 plausible_type_pairs=plausible_type_pairs,
                 corpus_pool=corpus_pool,
                 rng=rng,
-                sub_type=sub,
                 type_restricted=type_restricted_false_positives,
             )
             for fp_b_id, fp_b_info in candidates:
                 # Keep gold's relation_type so this perturbation isolates the
                 # wrong-entity_B signal (otherwise it overlaps with label_flip).
-                fp_pools[sub].append(_make(
-                    pmid, a_id, info_a, rel_type, fp_b_id, fp_b_info, 0, f"fp_{sub}",
+                fp_external_pool.append(_make(
+                    pmid, a_id, info_a, rel_type, fp_b_id, fp_b_info, 0, "fp_external",
                 ))
 
-        samples.append(_make(pmid, a_id, info_a, perturb_false_negative_label(),
-                             b_id, info_b, 0, "false_negative"))
-
-    # Phase 2: cap each FP pool at the per-split label_flip count
-    for sub, pool in fp_pools.items():
-        if len(pool) > label_flip_count:
-            pool = rng.sample(pool, label_flip_count)
-        samples.extend(pool)
+    # Phase 2: cap the fp_external pool at the per-split label_flip count
+    if len(fp_external_pool) > label_flip_count:
+        fp_external_pool = rng.sample(fp_external_pool, label_flip_count)
+    samples.extend(fp_external_pool)
 
     return samples
 
@@ -451,15 +589,12 @@ def samples_to_rels_like_df(samples: list[TrainingSample]) -> pd.DataFrame:
 # TODOs (open issues)
 # ---------------------------------------------------------------------------
 #
-# - Multi-ID umbrella entities: BioRED occasionally puts comma-separated MeSH IDs
-#   in one annotation row (e.g. "3172,3651,6927" for MODY). Currently dropped
-#   silently (about 8% of relations). See issue tracker.
-#
 # - Canonical mention selection: currently "longest". Consider "most frequent"
 #   or "first-occurring" and ablate.
 #
-# - NoRelation as an explicit gold-positive class, not just the false_negative
-#   label (issue #7).
+# - NoRelation distance metric: pipeline uses the character gap; the token and
+#   sentence variants are computed in a separate case study. Pick one, then wire
+#   the chosen metric in here.
 #
 # - Per-perturbation spin-off datasets for one-thing-at-a-time analysis
 #   (issue #3).

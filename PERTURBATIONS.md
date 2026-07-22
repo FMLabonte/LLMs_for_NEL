@@ -4,7 +4,7 @@ Canonical list of perturbation types we apply to BioRED gold relations to produc
 
 ## Scope: which relation types we perturb
 
-The dataset focuses on the three relation types that actually have enough examples to evaluate: `Association`, `Positive_Correlation`, `Negative_Correlation`. The other five (`Comparison`, `Cotreatment`, `Drug_Interaction`, `Bind`, `Conversion`) are dropped from the perturbed dataset; the CLI flag is `--rare-classes` (off by default; opt in to include them as an ablation).
+The label space is **four classes**: `Association`, `Positive_Correlation`, `Negative_Correlation`, and `NoRelation`. The first three come from BioRED relations (only these have enough examples to evaluate); the five rare types (`Comparison`, `Cotreatment`, `Drug_Interaction`, `Bind`, `Conversion`) are **always dropped** (the `--rare-classes` ablation was removed 2026-06-10). `NoRelation` is a genuine class sampled from co-mentioned but unrelated entity pairs, distance-matched to the real relations (see [Adding NoRelation golds](#adding-norelation-golds)).
 
 This is the default the filter is trained and evaluated on. The motivation and per-class counts are in the [Class-imbalance versions](#class-imbalance-versions) section below.
 
@@ -20,21 +20,32 @@ This is the default the filter is trained and evaluated on. The motivation and p
 
 | Name | Family | Mutates | Why | Label | Applies to |
 |---|---|---|---|---|---|
-| `gold` | positive | nothing | establishes the positive class | 1 | all kept relation types |
-| `label_flip` | label | relation type, swapped to a different one (one row per alternative kept type) | LLM picks the wrong relation type from a plausible menu | 0 | all kept relation types |
+| `gold` | positive | nothing | establishes the positive class | 1 | all four classes, incl. `NoRelation` |
+| `label_flip` | label | relation type, swapped to another class over the full 4-class matrix (one row per alternative) | LLM picks the wrong relation type from a plausible menu (incl. claiming a relation where there is none, dropping a real one, or weakening a correlation to `Association`) | 0 | all four; every off-diagonal cell, no skip |
 | `direction_swap` | direction | swap `entity_A` and `entity_B`, keep relation type | LLM reverses causality (e.g. "gene up-regulates compound" vs "compound up-regulates gene") | 0 | `Positive_Correlation`, `Negative_Correlation` only |
-| `fp_co_related` | false positive | replace `entity_B` with another entity that is in the abstract AND has its own annotated relation (just not with `entity_A`) | hardest false-positive case: both entities are independently real in the text, the model has to decide *this specific pairing* is fabricated | 0 | all kept relation types |
-| `fp_co_standalone` | false positive | replace `entity_B` with an entity that is in the abstract but has no annotated relation at all | medium false-positive: the entity is co-mentioned but bears no real relation in the abstract | 0 | all kept relation types |
-| `fp_external` | false positive | replace `entity_B` with an entity that is not in the abstract at all (drawn from the corpus pool) | easiest false-positive: detectable from text presence alone, weak baseline | 0 | all kept relation types |
-| `false_negative` | removal | replace the relation label with `NoRelation` for a triple that does have a real relation | LLM drops a real relation it should have kept | 0 | all kept relation types |
+| `fp_external` | false positive | replace `entity_B` with an entity that is not in the abstract at all (drawn from the corpus pool) | the model should reject a relation to an entity the abstract never mentions | 0 | the three relation classes (not `NoRelation` golds) |
+
+Two things were removed 2026-06-10 because the 4-class scheme made them redundant:
+
+- **`false_negative`**: dropping a real relation (relation → `NoRelation`) is now just a `label_flip` cell in the 4-class matrix, alongside the new claim-a-relation cells (`NoRelation` → a real type).
+- **`fp_co_related` and `fp_co_standalone`**: these replaced `entity_B` with an *in-abstract* entity, so the pair had no relation and was itself a `NoRelation` candidate. That made their rows duplicate the `NoRelation` → relation `label_flip` rows (measured: ~1.2k exact duplicates in train). `fp_external` is kept because its `entity_B` is *outside* the abstract, so it can never be a co-mention pair and never collides. The in-abstract false-positive signal is now carried by the `NoRelation` → relation flips.
 
 ## Per-perturbation notes
 
-### `label_flip` enumerates every alternative kept label per gold
+### `label_flip` walks the full 4-class matrix (every off-diagonal cell)
 
-For each gold relation we emit one `label_flip` row per alternative kept relation type. Under the reduced default (`Association`, `Positive_Correlation`, `Negative_Correlation`) that means every gold produces 2 `label_flip` rows: one swap to each of the other two types. With `--rare-classes` every gold produces 7 `label_flip` rows.
+For each gold we emit one `label_flip` row per alternative class, over every off-diagonal cell of the 4-class matrix, with no skip. A positive/negative correlation does entail a generic `Association`, so on the gold text a specific → `Association` flip would be technically true; but the synthetic abstract is written by an LLM that may soften a correlation down to plain association-level language, making the weaker label a genuine mismatch the QC model must learn to catch. Keeping these cells also trains the model to separate `Association` from the specific correlations instead of collapsing them. So `IMPLIED_RELATIONS` in `perturbations.py` is empty: nothing is skipped.
 
-Reason: keeps the entity pair fixed across all label-swap directions, so per-direction difficulty (e.g. `Positive_Correlation → Association` vs `Positive_Correlation → Negative_Correlation`) can be measured without being confounded by different entity pairs. Decided with Frederik on 2026-05-21.
+The 4-class matrix (✓ = valid negative, `self` on the diagonal):
+
+| gold ↓ \ to → | `Association` | `Positive_Correlation` | `Negative_Correlation` | `NoRelation` | # valid |
+|---|:---:|:---:|:---:|:---:|:---:|
+| `Association` | self | ✓ | ✓ | ✓ | 3 |
+| `Positive_Correlation` | ✓ | self | ✓ | ✓ | 3 |
+| `Negative_Correlation` | ✓ | ✓ | self | ✓ | 3 |
+| `NoRelation` | ✓ | ✓ | ✓ | self | 3 |
+
+So every gold produces 3 `label_flip` rows (the three other classes). The relation → `NoRelation` column is what used to be the separate `false_negative` perturbation; the `NoRelation` → relation row claims a relation where there is none; the specific → `Association` cells are the weakened-label negatives described above.
 
 ### `direction_swap` applies only to `Positive_Correlation` and `Negative_Correlation`
 
@@ -42,25 +53,17 @@ Reason: keeps the entity pair fixed across all label-swap directions, so per-dir
 
 Only `Positive_Correlation` and `Negative_Correlation` carry direction (`A` goes up, `B` goes up vs `B` going up, `A` going up, and similarly for negative). Those are the only types `direction_swap` is applied to. Frederik made this call on 2026-05-08: Association says two things are connected but not in which direction, so direction swap only makes sense for the two correlation types.
 
-The rare classes `Comparison`, `Cotreatment`, `Drug_Interaction`, `Bind`, `Conversion` are not in the perturbed dataset by default, so the question of direction-swapping them does not arise.
+`NoRelation` golds are not directional either, so they are never direction-swapped. The five rare relation types are no longer in the dataset, so the question of direction-swapping them does not arise.
 
-### `fp_*` keep the gold relation type
+### `fp_external` keeps the gold relation type
 
-`fp_co_related`, `fp_co_standalone`, `fp_external` all replace `entity_B`. They **keep the gold relation's `relation_type`**. We deliberately do not randomize the relation type for fp samples, because that would overlap with `label_flip` (the model could then detect fp via the wrong-relation signal rather than via the entity swap). When we keep the gold relation type, the wrong-`entity_B` signal stays isolated, so per-type F1 actually measures what we claim.
+`fp_external` replaces `entity_B` with a corpus entity not in the abstract, and **keeps the gold relation's `relation_type`**. We deliberately do not randomize the relation type, because that would overlap with `label_flip` (the model could then detect the fp via the wrong-relation signal rather than via the entity swap). Keeping the gold relation type isolates the wrong-`entity_B` signal, so per-type F1 measures what we claim.
 
-### The `NoRelation -> real_relation` case is `fp_co_standalone`
+### Both directions of the NoRelation boundary are covered
 
-On 2026-05-08 Frederik asked us to explicitly cover the case where two co-mentioned-but-unrelated entities get assigned one of the real relation labels. That case is already produced by `fp_co_standalone`, just framed from the other direction:
+On 2026-05-08 Frederik asked us to cover claiming a real relation between two co-mentioned-but-unrelated entities. That is now a **`NoRelation` gold flipped to a relation** (`label_flip`): a genuine non-relation pair `(entity_A, NoRelation, entity_B)` relabelled `(entity_A, R, entity_B)`: same pair, wrong claim. (It used to also be produced by `fp_co_standalone`, which is exactly why that family was dropped 2026-06-10: it duplicated these rows.)
 
-- `fp_co_standalone` starts from a real gold `(entity_A, R, entity_B)` triple
-- replaces `entity_B` with an in-abstract entity that has **no annotated relations**
-- keeps the gold's relation label `R`
-
-The output is a sample `(entity_A, R, entity_B')` where the gold answer for that pair is `NoRelation`. That is exactly "take a NoRelation pair, claim a real relation `R` between them". No separate `no_rel_to_relation` label is added; `fp_co_standalone` already covers it. Frederik just wanted it called out, not given its own label.
-
-### `false_negative` is the inverse case
-
-`false_negative` is the other side: take a real relation and relabel it as `NoRelation` (so the gold answer is `R` and the claimed answer is `NoRelation`). Together with `fp_co_standalone` this gives both directions of the NoRelation boundary.
+The inverse direction, **relation → `NoRelation`** (dropping a real relation), is the relation-row `NoRelation` cell of the `label_flip` matrix (formerly the `false_negative` perturbation). Together these give both directions of the `NoRelation` boundary.
 
 ## Per-perturbation difficulty (to be measured)
 
@@ -69,9 +72,10 @@ We track macro-F1 per `perturbation` value, so the per-type difficulty ranking f
 ## Sampling & balance rules
 
 - `direction_swap` is restricted to `Positive_Correlation` and `Negative_Correlation` (see above).
-- `label_flip` enumerates every alternative kept relation type per gold (one row per alternative). No random pick; the data set sees every label-swap direction on every entity pair.
-- `fp_co_related` and `fp_co_standalone` collect ALL eligible in-abstract candidates per gold (the in-abstract entity pool is small, typically under 20). `fp_external` samples up to `FP_EXTERNAL_MAX_PER_GOLD` (default 5) candidates per gold from the corpus pool, since enumerating the full corpus would blow up the pool.
-- **FP balance cap:** the per-split count of each FP type is capped at the per-split `label_flip` count. If the FP candidate pool exceeds the cap, we randomly downsample (seeded) to exactly the cap. This keeps all six perturbation types in the same order of magnitude. If a later experiment shows a particular FP type is the hardest to detect, we lift its cap by raising `FP_EXTERNAL_MAX_PER_GOLD` or by generating more candidates per gold.
+- `label_flip` walks the full 4-class matrix: one row per alternative class per gold, every off-diagonal cell, no skip (see above). No random pick.
+- **`NoRelation` gold sampling:** candidates are all co-mentioned entity pairs with no relation of any type. There are ~7x more of these than real relations, and they sit much farther apart in the text, so an unfiltered sample would teach the model "far apart = no relation". When `n_norelation_cap` is set we **distance-match**: each candidate is accepted with probability proportional to how common its in-abstract distance (sentence gap by default) is among the real related pairs, until the cap is hit (seeded; see `_norelation_gold_pairs`). Default cap `match_gold` = the per-split real-relation count, giving a 50/50 real-vs-`NoRelation` gold split.
+- `fp_external` samples up to `FP_EXTERNAL_MAX_PER_GOLD` (default 5) candidates per relation gold from the corpus pool (entities not in the abstract), since enumerating the full corpus would blow up the pool. `NoRelation` golds get no FP samples.
+- **FP balance cap:** the per-split count of each FP type is capped at the per-split `label_flip` count. If the FP candidate pool exceeds the cap, we randomly downsample (seeded) to exactly the cap; if it is smaller (common now that `NoRelation` golds inflate `label_flip`), every candidate is kept. If a later experiment shows a particular FP type is the hardest to detect, we lift its cap by raising `FP_EXTERNAL_MAX_PER_GOLD` or by generating more candidates per gold.
 - False-positive sampling is **type-restricted by default**: only `(entity_type_a, entity_type_b)` pairs that appear in real BioRED relations are eligible. This avoids implausible Species/CellLine pairings the model would learn to reject trivially. `--no-type-restrict` disables.
 - **Reproducibility:** same seed → same CSV every run. The seeded `random.Random` is used both for the `fp_external` per-gold subsample and the per-split downsample to the cap.
 
@@ -90,18 +94,13 @@ BioRED is dominated by 3 relation types. Per-class counts across the official sp
 | `Drug_Interaction` | 11 (0.3%) | **0** | 2 (0.2%) |
 | `Conversion` | 3 (0.1%) | **0** | 1 (0.1%) |
 
-The top 3 cover ~96-97% of every split. `Drug_Interaction` and `Conversion` have **zero examples in dev**, which means there is no evaluation signal for them no matter how the filter is trained. `Bind`, `Cotreatment`, `Comparison` are borderline at single-digit dev counts. We therefore build the dataset in two variants, both available from the same CLI:
+The top 3 cover ~96-97% of every split. `Drug_Interaction` and `Conversion` have **zero examples in dev**, so there is no evaluation signal for them no matter how the filter is trained; `Bind`, `Cotreatment`, `Comparison` are borderline at single-digit dev counts. We therefore **drop all five rare types** and keep only `Association`, `Positive_Correlation`, `Negative_Correlation` as the relation classes (plus `NoRelation`). Built with `python cli.py build`. The `--rare-classes` ablation that used to build a `_full` variant was removed 2026-06-10.
 
-- **reduced (default):** keep only `Association`, `Positive_Correlation`, `Negative_Correlation`. Built with `python cli.py build` (no flag) and used as the main training and evaluation set.
-- **full:** every relation type included. Built with `python cli.py build --rare-classes` and used as an ablation to confirm that adding the rare classes does not help (and that they are not a stealthy source of label noise).
+## Adding `NoRelation` golds
 
-Both versions share the same perturbation logic; only the set of gold relations that survives into the perturbation loop changes.
+`NoRelation` is a first-class gold (label 1), not just a perturbation target. We sample co-mentioned entity pairs that have **no annotated relation of any type** and emit them as `gold` with `relation_type = NoRelation, label = 1`, so the filter learns that "no relation" is a valid ground truth, not an absence. These golds then take part in `label_flip` like any other class (flipped to the three real relations).
 
-## Adding `NoRelation` as a positive-class entity pair
-
-`NoRelation` is the relation label used by the `false_negative` perturbation. To make `NoRelation` a first-class part of the training distribution (so the filter learns that "no relation" is a valid ground truth, not an absence), we also sample co-mentioned entity pairs that have no annotated relation and emit them as `gold` with `relation_type = NoRelation, label = 1`. Without this step `NoRelation` only ever appears with `label = 0`, which teaches the model the wrong thing.
-
-This needs conscious balancing: in real BioRED, the count of co-mentioned-but-unrelated pairs is far larger than the count of annotated relations. Cap the per-abstract count to keep `NoRelation` from dominating. Tracked as issue #7; not yet implemented.
+In real BioRED there are ~7x more such pairs than annotated relations (~26.7k vs ~4k in train), and they sit much farther apart in the text. We therefore distance-match and cap them: see the `NoRelation` gold sampling rule under [Sampling & balance rules](#sampling--balance-rules). Implemented 2026-06-10 (was issue #7). The cap size and the distance metric are configurable via `n_norelation_cap` and `norelation_distance_metric`; the pipeline defaults to the sentence gap with the `match_gold` cap (character gap is also supported; token is case-study-only).
 
 ## One-thing-at-a-time spin-off datasets
 
@@ -115,6 +114,5 @@ Without this discipline, observed performance differences between perturbation t
 
 ## Open design questions
 
-- **Multi-ID umbrella entities** (e.g. `MODY → 3172,3651,6927`) currently get dropped (~8% of gold relations). Options: pick first ID, expand to multiple rows, skip the relation entirely. Default for now is skip; revisit before scaling up.
+- **`NoRelation` cap size & distance metric**: how many `NoRelation` golds to keep per split (pipeline default `match_gold`, a 50/50 split) and which distance to match on (character, token, or sentence gap; pipeline default character).
 - **Combo perturbations** (e.g. `label_flip + direction_swap` on the same gold) are not in v1. Could be added later as a harder bucket if single-perturbation accuracy saturates.
-- **`false_negative` entity-swap variant:** should we also generate false-negatives where `entity_B` is *replaced* (so the negative is about a different pair than the gold)? Current implementation only relabels the existing pair to `NoRelation`.
