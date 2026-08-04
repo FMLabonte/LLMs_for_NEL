@@ -16,6 +16,9 @@ Nothing. The Dev sweep and the common-test-set sweep are both finished
 
 ## Done since the sweeps landed
 
+- [x] **Synthetic-abstract PubMedBERT trained and scored** (2026-08-04). Qwen3-8B abstracts,
+  all epochs scored on real BioRED Test. Write-up in `finetuning/SYNTH_COMPARE.md`, details in
+  `TASKS_DONE.md` section 9. Two follow-ups fall out of it, listed under "Open" below.
 - [x] **New numbers are in the LaTeX table.** All four rows now use the pure-BioRED test
   split and the checkpoint the training pipeline itself selected on Dev (epochs 8, 8, 9, 9,
   verified by matching each `_dump` score to its epoch exactly).
@@ -24,6 +27,18 @@ Nothing. The Dev sweep and the common-test-set sweep are both finished
   but the ranking of the two training sets flips between the last two columns.
 - [x] **Figures regenerated** from the complete data; the combined figure had been rendered
   mid-sweep and was missing two curves. The slide points at the common-test-set version.
+
+## Open
+
+- [?] **No synthetic Dev split.** The synthetic run reports un-selected epochs, so it is not
+  directly comparable to the presentation's Dev-selected real-BioRED row. A fair single headline
+  needs a real synthetic Dev split (generate one, or hold out synthetic-train papers). Blocked on
+  a decision by Chris on how to build it.
+- [ ] **Synthetic run used 5 epochs, original used 10.** Both saturate early (synthetic peaks at
+  epoch 1 matched / epoch 4 all rels.), so extending is likely pointless, but the epoch budget is
+  asymmetric if a strict comparison is wanted.
+- [ ] **Next: filtered synthetic data** (train on what the QC model keeps), item 4 in
+  `TASKS_DONE.md` section 7. Not started.
 
 ## Waiting
 

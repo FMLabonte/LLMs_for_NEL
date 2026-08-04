@@ -354,7 +354,7 @@ one sentence per line, key takeaway per slide in bold.
    969 steps/epoch = ~31,000 rows = all negatives. Corroborated by the corpus table in 3.1:
    Train has 4,178 gold against 29,747 candidate pairs.)
 2. Perturbed BioRED: retrain in the fixed pipeline and measure the gap to the baseline.
-3. Synthetic data: train on the LLM-generated abstracts.
+3. Synthetic data: train on the LLM-generated abstracts. DONE, see section 9.
 4. Filtered synthetic data: train on what the QC model (BERT 2) keeps.
 
 Since training is finished after 4-5 epochs, future runs do not need 10.
@@ -371,3 +371,43 @@ Since training is finished after 4-5 epochs, future runs do not need 10.
   to call identical.
 - `eval.ipynb` cannot run as-is against the pinned transformers 5.11 (`Trainer(tokenizer=)`).
   Worth reporting upstream; the same call sits in `plot_checkpoints_comparison`.
+
+---
+
+## 9. Synthetic-abstract training run (done, 2026-08-04)
+
+Trained PubMedBERT on the LLM-generated abstracts (`Data/Synthetic abstracts/results_qwen3_8b_train.json`)
+and scored every epoch on the real BioRED Test split with the BioRED F1 metric.
+Full write-up and the epoch-wise comparison table are in `finetuning/SYNTH_COMPARE.md`.
+
+What was reused (no new parsing logic):
+`dataset_preparation/synthetic_abstracts.py::build_synthetic_parsed` swaps only the abstract
+*text* into BioRED's `(meta, anns, rels)` triple (one virtual pmid `<pmid>#g<n>` per generation),
+so `build_pure_biored_samples` and the notebook `build_samples` run unchanged. Entities, types,
+gold relations and distance-matched negatives all come from BioRED metadata matched by paper id.
+
+How it differs from the original run (see section 3):
+- Abstract text is synthetic (Qwen3-8B) instead of real; everything else (9-class setup, prompt,
+  distance-matched negatives fit on real Train, real BioRED Test) is identical.
+- 3 generations per paper are used as context augmentation: 25,002 train rows (was 8,340).
+- No between-epoch evaluation and no checkpoint selection, because there is no synthetic Dev split.
+  Gated behind the notebook flag `ENABLE_EVAL_BETWEEN_EPOCHS` (default False). The synthetic *test*
+  split is not used at all in the default run.
+- 5 epochs (the original ran 10). Both saturate early, so this is not the limiting factor.
+
+Files:
+- Notebook: `finetuning/finetuning_pubmedbert.ipynb` now has `DATA_SOURCE` ("biored"|"synthetic")
+  and `ENABLE_EVAL_BETWEEN_EPOCHS`. Toggling `DATA_SOURCE` back to "biored" restores the original run.
+- Per-epoch eval driver: `finetuning/eval_all_epochs_biored_metric.py <run_dir>` writes
+  `epoch_biored_metric.json` in the run dir (matched + all_pairs, real BioRED Test).
+- Run dir: `finetuning/relations-bert_NeuML-pubmedbert-base-embeddings_2026-08-04_21-41-09_BioRed_synthetic_micro`.
+
+Result (BioRED F1 on real BioRED Test, un-selected epochs):
+- matched: best synthetic 0.573 (ep1) vs real-BioRED best 0.638 (ep5) / Dev-selected 0.619 (ep8).
+- all rels.: best synthetic 0.389 (ep4) vs real-BioRED best 0.399 (ep5) / Dev-selected 0.375 (ep8).
+So synthetic trails on matched but is competitive on all rels., getting there with higher precision
+and lower recall (more conservative). It peaks early (matched ep1, all rels. ep4) then overfits.
+
+Caveat for any comparison: the synthetic numbers are un-selected (no synthetic Dev split), whereas
+the presentation quotes the real-BioRED model at its Dev-selected checkpoint. A fair single headline
+for the synthetic model needs a real synthetic Dev split.
