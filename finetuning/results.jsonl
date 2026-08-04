@@ -1,0 +1,1207 @@
+{
+    "model_name": "relations-bert-2026-07-01_18-38-41_BioRed_micro",
+    "model": "relations-bert-2026-07-01_18-38-41_BioRed_micro",
+    "dataset": "BioRed",
+    "f1_average": "micro",
+    "metrics": {
+        "loss": 1.441411018371582,
+        "accuracy": 0.7235597592433362,
+        "precision": 0.5345226171248618,
+        "recall": 0.5011693625091722,
+        "f1_micro": 0.7235597592433362,
+        "f1_macro": 0.5131381270441879,
+        "f1_weighted": 0.7212295376026461
+    },
+    "actual_metrics": {
+        "metric": "biored_f1",
+        "description": "Pooled over the 8 positive relation types; rows where gold and prediction are both NoRelation are not scored at all.",
+        "checkpoint": "relations-bert-2026-07-01_18-38-41_BioRed_micro_dump",
+        "base_model": "NeuML/pubmedbert-base-embeddings",
+        "eval_split": "Test.PubTator",
+        "eval_dataset": "BioRed",
+        "eval_variant": "matched_norelation",
+        "eval_rows": 2326,
+        "biored_precision": 0.622822299651568,
+        "biored_recall": 0.6147893379191746,
+        "biored_f1": 0.6187797490263955,
+        "tp": 715,
+        "fp": 433,
+        "fn": 448,
+        "micro_f1_all_classes": 0.7235597592433362,
+        "macro_f1_all_classes": 0.5131381270441879,
+        "negative_discrimination": {
+            "tp": 953,
+            "fp": 195,
+            "fn": 210,
+            "tn": 968,
+            "accuracy": 0.8258813413585555,
+            "precision": 0.8301393728222997,
+            "recall": 0.819432502149613,
+            "f1": 0.8247511899610559
+        },
+        "per_class": {
+            "Association": {
+                "tp": 348,
+                "fp": 187,
+                "fn": 287,
+                "precision": 0.6504672897196262,
+                "recall": 0.5480314960629922,
+                "f1": 0.594871794871795,
+                "support": 635
+            },
+            "Bind": {
+                "tp": 4,
+                "fp": 2,
+                "fn": 5,
+                "precision": 0.6666666666666666,
+                "recall": 0.4444444444444444,
+                "f1": 0.5333333333333333,
+                "support": 9
+            },
+            "Comparison": {
+                "tp": 4,
+                "fp": 1,
+                "fn": 2,
+                "precision": 0.8,
+                "recall": 0.6666666666666666,
+                "f1": 0.7272727272727272,
+                "support": 6
+            },
+            "Conversion": {
+                "tp": 0,
+                "fp": 0,
+                "fn": 1,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 1
+            },
+            "Cotreatment": {
+                "tp": 9,
+                "fp": 4,
+                "fn": 5,
+                "precision": 0.6923076923076923,
+                "recall": 0.6428571428571429,
+                "f1": 0.6666666666666666,
+                "support": 14
+            },
+            "Drug_Interaction": {
+                "tp": 0,
+                "fp": 0,
+                "fn": 2,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 2
+            },
+            "Negative_Correlation": {
+                "tp": 108,
+                "fp": 79,
+                "fn": 63,
+                "precision": 0.5775401069518716,
+                "recall": 0.631578947368421,
+                "f1": 0.6033519553072626,
+                "support": 171
+            },
+            "Positive_Correlation": {
+                "tp": 242,
+                "fp": 160,
+                "fn": 83,
+                "precision": 0.6019900497512438,
+                "recall": 0.7446153846153846,
+                "f1": 0.6657496561210454,
+                "support": 325
+            }
+        },
+        "full_norelation_test": {
+            "eval_split": "Test.PubTator",
+            "eval_variant": "full_norelation",
+            "eval_rows": 10097,
+            "biored_precision": 0.269811320754717,
+            "biored_recall": 0.6147893379191746,
+            "biored_f1": 0.3750327825858904,
+            "tp": 715,
+            "fp": 1935,
+            "fn": 448,
+            "micro_f1_all_classes": 0.7875606615826483,
+            "macro_f1_all_classes": 0.39221462556884895,
+            "negative_discrimination": {
+                "tp": 953,
+                "fp": 1697,
+                "fn": 210,
+                "tn": 7237,
+                "accuracy": 0.8111320194117064,
+                "precision": 0.35962264150943396,
+                "recall": 0.819432502149613,
+                "f1": 0.4998688696564385
+            },
+            "per_class": {
+                "Association": {
+                    "tp": 348,
+                    "fp": 1056,
+                    "fn": 287,
+                    "precision": 0.24786324786324787,
+                    "recall": 0.5480314960629922,
+                    "f1": 0.34134379597842085,
+                    "support": 635
+                },
+                "Bind": {
+                    "tp": 4,
+                    "fp": 7,
+                    "fn": 5,
+                    "precision": 0.36363636363636365,
+                    "recall": 0.4444444444444444,
+                    "f1": 0.39999999999999997,
+                    "support": 9
+                },
+                "Comparison": {
+                    "tp": 4,
+                    "fp": 3,
+                    "fn": 2,
+                    "precision": 0.5714285714285714,
+                    "recall": 0.6666666666666666,
+                    "f1": 0.6153846153846153,
+                    "support": 6
+                },
+                "Conversion": {
+                    "tp": 0,
+                    "fp": 1,
+                    "fn": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0.0,
+                    "support": 1
+                },
+                "Cotreatment": {
+                    "tp": 9,
+                    "fp": 16,
+                    "fn": 5,
+                    "precision": 0.36,
+                    "recall": 0.6428571428571429,
+                    "f1": 0.4615384615384615,
+                    "support": 14
+                },
+                "Drug_Interaction": {
+                    "tp": 0,
+                    "fp": 0,
+                    "fn": 2,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0.0,
+                    "support": 2
+                },
+                "Negative_Correlation": {
+                    "tp": 108,
+                    "fp": 237,
+                    "fn": 63,
+                    "precision": 0.3130434782608696,
+                    "recall": 0.631578947368421,
+                    "f1": 0.4186046511627907,
+                    "support": 171
+                },
+                "Positive_Correlation": {
+                    "tp": 242,
+                    "fp": 615,
+                    "fn": 83,
+                    "precision": 0.2823803967327888,
+                    "recall": 0.7446153846153846,
+                    "f1": 0.40947546531302875,
+                    "support": 325
+                }
+            }
+        }
+    }
+}
+{
+    "model_name": "relations-bert-2026-07_01-18-38-41_BioRed_micro/checkpoint-2610",
+    "model": "relations-bert-2026-07-01_18-38-41_BioRed_micro/checkpoint-2610",
+    "dataset": "BioRed",
+    "f1_average": "micro",
+    "metrics": {
+        "loss": 0.9887259602546692,
+        "accuracy": 0.7351676698194325,
+        "precision": 0.6882402646989829,
+        "recall": 0.5098645564979197,
+        "f1_micro": 0.7351676698194325,
+        "f1_macro": 0.5466821743323038,
+        "f1_weighted": 0.7335082047146179
+    },
+    "actual_metrics": {
+        "metric": "biored_f1",
+        "description": "Pooled over the 8 positive relation types; rows where gold and prediction are both NoRelation are not scored at all.",
+        "checkpoint": "relations-bert-2026-07-01_18-38-41_BioRed_micro/checkpoint-2610",
+        "base_model": "NeuML/pubmedbert-base-embeddings",
+        "eval_split": "Test.PubTator",
+        "eval_dataset": "BioRed",
+        "eval_variant": "matched_norelation",
+        "eval_rows": 2326,
+        "biored_precision": 0.6439195100612424,
+        "biored_recall": 0.6328460877042132,
+        "biored_f1": 0.6383347788378145,
+        "tp": 736,
+        "fp": 407,
+        "fn": 427,
+        "micro_f1_all_classes": 0.7351676698194325,
+        "macro_f1_all_classes": 0.5466821743323037,
+        "negative_discrimination": {
+            "tp": 954,
+            "fp": 189,
+            "fn": 209,
+            "tn": 974,
+            "accuracy": 0.8288907996560619,
+            "precision": 0.8346456692913385,
+            "recall": 0.820292347377472,
+            "f1": 0.8274067649609713
+        },
+        "per_class": {
+            "Association": {
+                "tp": 383,
+                "fp": 178,
+                "fn": 252,
+                "precision": 0.6827094474153298,
+                "recall": 0.6031496062992125,
+                "f1": 0.6404682274247491,
+                "support": 635
+            },
+            "Bind": {
+                "tp": 1,
+                "fp": 0,
+                "fn": 8,
+                "precision": 1.0,
+                "recall": 0.1111111111111111,
+                "f1": 0.19999999999999998,
+                "support": 9
+            },
+            "Comparison": {
+                "tp": 4,
+                "fp": 1,
+                "fn": 2,
+                "precision": 0.8,
+                "recall": 0.6666666666666666,
+                "f1": 0.7272727272727272,
+                "support": 6
+            },
+            "Conversion": {
+                "tp": 0,
+                "fp": 0,
+                "fn": 1,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 1
+            },
+            "Cotreatment": {
+                "tp": 7,
+                "fp": 3,
+                "fn": 7,
+                "precision": 0.7,
+                "recall": 0.5,
+                "f1": 0.5833333333333334,
+                "support": 14
+            },
+            "Drug_Interaction": {
+                "tp": 1,
+                "fp": 0,
+                "fn": 1,
+                "precision": 1.0,
+                "recall": 0.5,
+                "f1": 0.6666666666666666,
+                "support": 2
+            },
+            "Negative_Correlation": {
+                "tp": 117,
+                "fp": 90,
+                "fn": 54,
+                "precision": 0.5652173913043478,
+                "recall": 0.6842105263157895,
+                "f1": 0.6190476190476191,
+                "support": 171
+            },
+            "Positive_Correlation": {
+                "tp": 223,
+                "fp": 135,
+                "fn": 102,
+                "precision": 0.6229050279329609,
+                "recall": 0.6861538461538461,
+                "f1": 0.6530014641288433,
+                "support": 325
+            }
+        },
+        "full_norelation_test": {
+            "eval_split": "Test.PubTator",
+            "eval_variant": "full_norelation",
+            "eval_rows": 10097,
+            "biored_precision": 0.2911392405063291,
+            "biored_recall": 0.6328460877042132,
+            "biored_f1": 0.39880791113519376,
+            "tp": 736,
+            "fp": 1792,
+            "fn": 427,
+            "micro_f1_all_classes": 0.8018223234624146,
+            "macro_f1_all_classes": 0.4470038738044222,
+            "negative_discrimination": {
+                "tp": 954,
+                "fp": 1574,
+                "fn": 209,
+                "tn": 7360,
+                "accuracy": 0.8234128949192829,
+                "precision": 0.377373417721519,
+                "recall": 0.820292347377472,
+                "f1": 0.5169330804659984
+            },
+            "per_class": {
+                "Association": {
+                    "tp": 383,
+                    "fp": 1026,
+                    "fn": 252,
+                    "precision": 0.2718239886444287,
+                    "recall": 0.6031496062992125,
+                    "f1": 0.3747553816046967,
+                    "support": 635
+                },
+                "Bind": {
+                    "tp": 1,
+                    "fp": 1,
+                    "fn": 8,
+                    "precision": 0.5,
+                    "recall": 0.1111111111111111,
+                    "f1": 0.1818181818181818,
+                    "support": 9
+                },
+                "Comparison": {
+                    "tp": 4,
+                    "fp": 4,
+                    "fn": 2,
+                    "precision": 0.5,
+                    "recall": 0.6666666666666666,
+                    "f1": 0.5714285714285715,
+                    "support": 6
+                },
+                "Conversion": {
+                    "tp": 0,
+                    "fp": 0,
+                    "fn": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0.0,
+                    "support": 1
+                },
+                "Cotreatment": {
+                    "tp": 7,
+                    "fp": 8,
+                    "fn": 7,
+                    "precision": 0.4666666666666667,
+                    "recall": 0.5,
+                    "f1": 0.4827586206896552,
+                    "support": 14
+                },
+                "Drug_Interaction": {
+                    "tp": 1,
+                    "fp": 0,
+                    "fn": 1,
+                    "precision": 1.0,
+                    "recall": 0.5,
+                    "f1": 0.6666666666666666,
+                    "support": 2
+                },
+                "Negative_Correlation": {
+                    "tp": 117,
+                    "fp": 265,
+                    "fn": 54,
+                    "precision": 0.306282722513089,
+                    "recall": 0.6842105263157895,
+                    "f1": 0.42314647377938525,
+                    "support": 171
+                },
+                "Positive_Correlation": {
+                    "tp": 223,
+                    "fp": 488,
+                    "fn": 102,
+                    "precision": 0.3136427566807314,
+                    "recall": 0.6861538461538461,
+                    "f1": 0.4305019305019305,
+                    "support": 325
+                }
+            }
+        }
+    }
+}
+{
+    "model_name": "relations-bert-2026-07-01_20-51-41_BioRedPerturbated_micro",
+    "model": "relations-bert-2026-07-01_20-51-41_BioRedPerturbated_micro",
+    "dataset": "BioRedPerturbated",
+    "f1_average": "micro",
+    "metrics": {
+        "loss": 1.7080390453338623,
+        "accuracy": 0.6946992864424058,
+        "precision": 0.5780185418440111,
+        "recall": 0.5686708208329475,
+        "f1_micro": 0.6946992864424058,
+        "f1_macro": 0.5661355000685492,
+        "f1_weighted": 0.6916510059893698
+    },
+    "actual_metrics": {
+        "metric": "biored_f1",
+        "description": "Pooled over the 8 positive relation types; rows where gold and prediction are both NoRelation are not scored at all.",
+        "checkpoint": "relations-bert-2026-07-01_20-51-41_BioRedPerturbated_micro_dump",
+        "base_model": "NeuML/pubmedbert-base-embeddings",
+        "eval_split": "Test.PubTator",
+        "eval_dataset": "BioRedPerturbated",
+        "eval_variant": "matched_norelation",
+        "eval_rows": 1962,
+        "biored_precision": 0.5960539979231568,
+        "biored_recall": 0.5797979797979798,
+        "biored_f1": 0.5878136200716845,
+        "tp": 574,
+        "fp": 389,
+        "fn": 416,
+        "micro_f1_all_classes": 0.6946992864424058,
+        "macro_f1_all_classes": 0.5661355000685492,
+        "negative_discrimination": {
+            "tp": 780,
+            "fp": 183,
+            "fn": 210,
+            "tn": 789,
+            "accuracy": 0.7996941896024465,
+            "precision": 0.8099688473520249,
+            "recall": 0.7878787878787878,
+            "f1": 0.7987711213517665
+        },
+        "per_class": {
+            "Association": {
+                "tp": 256,
+                "fp": 149,
+                "fn": 270,
+                "precision": 0.6320987654320988,
+                "recall": 0.4866920152091255,
+                "f1": 0.5499462943071965,
+                "support": 526
+            },
+            "Bind": {
+                "tp": 1,
+                "fp": 6,
+                "fn": 4,
+                "precision": 0.14285714285714285,
+                "recall": 0.2,
+                "f1": 0.16666666666666666,
+                "support": 5
+            },
+            "Comparison": {
+                "tp": 4,
+                "fp": 3,
+                "fn": 2,
+                "precision": 0.5714285714285714,
+                "recall": 0.6666666666666666,
+                "f1": 0.6153846153846153,
+                "support": 6
+            },
+            "Conversion": {
+                "tp": 0,
+                "fp": 0,
+                "fn": 1,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 1
+            },
+            "Cotreatment": {
+                "tp": 8,
+                "fp": 1,
+                "fn": 6,
+                "precision": 0.8888888888888888,
+                "recall": 0.5714285714285714,
+                "f1": 0.6956521739130435,
+                "support": 14
+            },
+            "Drug_Interaction": {
+                "tp": 2,
+                "fp": 0,
+                "fn": 0,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "support": 2
+            },
+            "Negative_Correlation": {
+                "tp": 108,
+                "fp": 60,
+                "fn": 52,
+                "precision": 0.6428571428571429,
+                "recall": 0.675,
+                "f1": 0.6585365853658537,
+                "support": 160
+            },
+            "Positive_Correlation": {
+                "tp": 195,
+                "fp": 170,
+                "fn": 81,
+                "precision": 0.5342465753424658,
+                "recall": 0.7065217391304348,
+                "f1": 0.608424336973479,
+                "support": 276
+            }
+        }
+    }
+}
+{
+    "model_name": "relations-bert-BioFormer8L-2026-07-01_22-24-16_BioRedPerturbated_micro",
+    "model": "relations-bert-BioFormer8L-2026-07-01_22-24-16_BioRedPerturbated_micro",
+    "dataset": "BioRedPerturbated",
+    "f1_average": "micro",
+    "metrics": {
+        "loss": 1.8103584051132202,
+        "accuracy": 0.6427115188583078,
+        "precision": 0.45264624037630175,
+        "recall": 0.4409233089803187,
+        "f1_micro": 0.6427115188583078,
+        "f1_macro": 0.442691008399548,
+        "f1_weighted": 0.6371181990166147
+    },
+    "actual_metrics": {
+        "metric": "biored_f1",
+        "description": "Pooled over the 8 positive relation types; rows where gold and prediction are both NoRelation are not scored at all.",
+        "checkpoint": "relations-bert-BioFormer8L-2026-07-01_22-24-16_BioRedPerturbated_micro_dump",
+        "base_model": "bioformers/bioformer-8L",
+        "eval_split": "Test.PubTator",
+        "eval_dataset": "BioRedPerturbated",
+        "eval_variant": "matched_norelation",
+        "eval_rows": 1962,
+        "biored_precision": 0.5421166306695464,
+        "biored_recall": 0.5070707070707071,
+        "biored_f1": 0.5240083507306891,
+        "tp": 502,
+        "fp": 424,
+        "fn": 488,
+        "micro_f1_all_classes": 0.6427115188583078,
+        "macro_f1_all_classes": 0.4427072987251863,
+        "negative_discrimination": {
+            "tp": 713,
+            "fp": 213,
+            "fn": 277,
+            "tn": 759,
+            "accuracy": 0.7502548419979612,
+            "precision": 0.7699784017278618,
+            "recall": 0.7202020202020202,
+            "f1": 0.744258872651357
+        },
+        "per_class": {
+            "Association": {
+                "tp": 228,
+                "fp": 179,
+                "fn": 298,
+                "precision": 0.5601965601965602,
+                "recall": 0.43346007604562736,
+                "f1": 0.4887459807073955,
+                "support": 526
+            },
+            "Bind": {
+                "tp": 2,
+                "fp": 5,
+                "fn": 3,
+                "precision": 0.2857142857142857,
+                "recall": 0.4,
+                "f1": 0.3333333333333333,
+                "support": 5
+            },
+            "Comparison": {
+                "tp": 4,
+                "fp": 1,
+                "fn": 2,
+                "precision": 0.8,
+                "recall": 0.6666666666666666,
+                "f1": 0.7272727272727272,
+                "support": 6
+            },
+            "Conversion": {
+                "tp": 0,
+                "fp": 0,
+                "fn": 1,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 1
+            },
+            "Cotreatment": {
+                "tp": 7,
+                "fp": 4,
+                "fn": 7,
+                "precision": 0.6363636363636364,
+                "recall": 0.5,
+                "f1": 0.56,
+                "support": 14
+            },
+            "Drug_Interaction": {
+                "tp": 0,
+                "fp": 0,
+                "fn": 2,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 2
+            },
+            "Negative_Correlation": {
+                "tp": 92,
+                "fp": 78,
+                "fn": 68,
+                "precision": 0.5411764705882353,
+                "recall": 0.575,
+                "f1": 0.5575757575757575,
+                "support": 160
+            },
+            "Positive_Correlation": {
+                "tp": 169,
+                "fp": 157,
+                "fn": 107,
+                "precision": 0.5184049079754601,
+                "recall": 0.6123188405797102,
+                "f1": 0.5614617940199335,
+                "support": 276
+            }
+        }
+    }
+}
+{
+    "model_name": "relations-bert-BioFormer8L-2026-07-01_22-24-16_BioRedPerturbated_micro/checkpoint-4284",
+    "model": "relations-bert-BioFormer8L-2026-07-01_22-24-16_BioRedPerturbated_micro/checkpoint-4284",
+    "dataset": "BioRedPerturbated",
+    "f1_average": "micro",
+    "metrics": {
+        "loss": 1.8103584051132202,
+        "accuracy": 0.6427115188583078,
+        "precision": 0.45264624037630175,
+        "recall": 0.4409233089803187,
+        "f1_micro": 0.6427115188583078,
+        "f1_macro": 0.442691008399548,
+        "f1_weighted": 0.6371181990166147
+    },
+    "actual_metrics": {
+        "metric": "biored_f1",
+        "description": "Pooled over the 8 positive relation types; rows where gold and prediction are both NoRelation are not scored at all.",
+        "checkpoint": "relations-bert-BioFormer8L-2026-07-01_22-24-16_BioRedPerturbated_micro/checkpoint-4284",
+        "base_model": "bioformers/bioformer-8L",
+        "eval_split": "Test.PubTator",
+        "eval_dataset": "BioRedPerturbated",
+        "eval_variant": "matched_norelation",
+        "eval_rows": 1962,
+        "biored_precision": 0.5421166306695464,
+        "biored_recall": 0.5070707070707071,
+        "biored_f1": 0.5240083507306891,
+        "tp": 502,
+        "fp": 424,
+        "fn": 488,
+        "micro_f1_all_classes": 0.6427115188583078,
+        "macro_f1_all_classes": 0.4427072987251863,
+        "negative_discrimination": {
+            "tp": 713,
+            "fp": 213,
+            "fn": 277,
+            "tn": 759,
+            "accuracy": 0.7502548419979612,
+            "precision": 0.7699784017278618,
+            "recall": 0.7202020202020202,
+            "f1": 0.744258872651357
+        },
+        "per_class": {
+            "Association": {
+                "tp": 228,
+                "fp": 179,
+                "fn": 298,
+                "precision": 0.5601965601965602,
+                "recall": 0.43346007604562736,
+                "f1": 0.4887459807073955,
+                "support": 526
+            },
+            "Bind": {
+                "tp": 2,
+                "fp": 5,
+                "fn": 3,
+                "precision": 0.2857142857142857,
+                "recall": 0.4,
+                "f1": 0.3333333333333333,
+                "support": 5
+            },
+            "Comparison": {
+                "tp": 4,
+                "fp": 1,
+                "fn": 2,
+                "precision": 0.8,
+                "recall": 0.6666666666666666,
+                "f1": 0.7272727272727272,
+                "support": 6
+            },
+            "Conversion": {
+                "tp": 0,
+                "fp": 0,
+                "fn": 1,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 1
+            },
+            "Cotreatment": {
+                "tp": 7,
+                "fp": 4,
+                "fn": 7,
+                "precision": 0.6363636363636364,
+                "recall": 0.5,
+                "f1": 0.56,
+                "support": 14
+            },
+            "Drug_Interaction": {
+                "tp": 0,
+                "fp": 0,
+                "fn": 2,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 2
+            },
+            "Negative_Correlation": {
+                "tp": 92,
+                "fp": 78,
+                "fn": 68,
+                "precision": 0.5411764705882353,
+                "recall": 0.575,
+                "f1": 0.5575757575757575,
+                "support": 160
+            },
+            "Positive_Correlation": {
+                "tp": 169,
+                "fp": 157,
+                "fn": 107,
+                "precision": 0.5184049079754601,
+                "recall": 0.6123188405797102,
+                "f1": 0.5614617940199335,
+                "support": 276
+            }
+        }
+    }
+}
+{
+    "model_name": "relations-bert_bioformers-bioformer-8L_2026-07-01_22-52-43_BioRed_micro",
+    "model": "relations-bert_bioformers-bioformer-8L_2026-07-01_22-52-43_BioRed_micro",
+    "dataset": "BioRed",
+    "f1_average": "micro",
+    "metrics": {
+        "loss": 1.6013365983963013,
+        "accuracy": 0.674548581255374,
+        "precision": 0.3630184040342277,
+        "recall": 0.34301371545358894,
+        "f1_micro": 0.674548581255374,
+        "f1_macro": 0.34557865832880136,
+        "f1_weighted": 0.6688796467756986
+    },
+    "actual_metrics": {
+        "metric": "biored_f1",
+        "description": "Pooled over the 8 positive relation types; rows where gold and prediction are both NoRelation are not scored at all.",
+        "checkpoint": "relations-bert-bioformers-bioformer-8L_2026-07-01_22-52-43_BioRed_micro_dump",
+        "base_model": "bioformers/bioformer-8L",
+        "eval_split": "Test.PubTator",
+        "eval_dataset": "BioRed",
+        "eval_variant": "matched_norelation",
+        "eval_rows": 2326,
+        "biored_precision": 0.5488029465930019,
+        "biored_recall": 0.5124677558039553,
+        "biored_f1": 0.5300133392618942,
+        "tp": 596,
+        "fp": 490,
+        "fn": 567,
+        "micro_f1_all_classes": 0.674548581255374,
+        "macro_f1_all_classes": 0.34557865832880136,
+        "negative_discrimination": {
+            "tp": 896,
+            "fp": 190,
+            "fn": 267,
+            "tn": 973,
+            "accuracy": 0.8035253654342218,
+            "precision": 0.8250460405156538,
+            "recall": 0.7704213241616509,
+            "f1": 0.796798577145398
+        },
+        "per_class": {
+            "Association": {
+                "tp": 308,
+                "fp": 209,
+                "fn": 327,
+                "precision": 0.5957446808510638,
+                "recall": 0.48503937007874015,
+                "f1": 0.5347222222222223,
+                "support": 635
+            },
+            "Bind": {
+                "tp": 1,
+                "fp": 2,
+                "fn": 8,
+                "precision": 0.3333333333333333,
+                "recall": 0.1111111111111111,
+                "f1": 0.16666666666666666,
+                "support": 9
+            },
+            "Comparison": {
+                "tp": 0,
+                "fp": 7,
+                "fn": 6,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 6
+            },
+            "Conversion": {
+                "tp": 0,
+                "fp": 0,
+                "fn": 1,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 1
+            },
+            "Cotreatment": {
+                "tp": 8,
+                "fp": 7,
+                "fn": 6,
+                "precision": 0.5333333333333333,
+                "recall": 0.5714285714285714,
+                "f1": 0.5517241379310344,
+                "support": 14
+            },
+            "Drug_Interaction": {
+                "tp": 0,
+                "fp": 0,
+                "fn": 2,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 2
+            },
+            "Negative_Correlation": {
+                "tp": 81,
+                "fp": 80,
+                "fn": 90,
+                "precision": 0.5031055900621118,
+                "recall": 0.47368421052631576,
+                "f1": 0.4879518072289157,
+                "support": 171
+            },
+            "Positive_Correlation": {
+                "tp": 198,
+                "fp": 185,
+                "fn": 127,
+                "precision": 0.5169712793733682,
+                "recall": 0.6092307692307692,
+                "f1": 0.5593220338983051,
+                "support": 325
+            }
+        },
+        "full_norelation_test": {
+            "eval_split": "Test.PubTator",
+            "eval_variant": "full_norelation",
+            "eval_rows": 10097,
+            "biored_precision": 0.22431313511479112,
+            "biored_recall": 0.5124677558039553,
+            "biored_f1": 0.31204188481675393,
+            "tp": 596,
+            "fp": 2061,
+            "fn": 567,
+            "micro_f1_all_classes": 0.769436466277112,
+            "macro_f1_all_classes": 0.2592747045370788,
+            "negative_discrimination": {
+                "tp": 896,
+                "fp": 1761,
+                "fn": 267,
+                "tn": 7173,
+                "accuracy": 0.7991482618599584,
+                "precision": 0.3372224313135115,
+                "recall": 0.7704213241616509,
+                "f1": 0.46910994764397906
+            },
+            "per_class": {
+                "Association": {
+                    "tp": 308,
+                    "fp": 1220,
+                    "fn": 327,
+                    "precision": 0.20157068062827224,
+                    "recall": 0.48503937007874015,
+                    "f1": 0.28478964401294493,
+                    "support": 635
+                },
+                "Bind": {
+                    "tp": 1,
+                    "fp": 17,
+                    "fn": 8,
+                    "precision": 0.05555555555555555,
+                    "recall": 0.1111111111111111,
+                    "f1": 0.07407407407407407,
+                    "support": 9
+                },
+                "Comparison": {
+                    "tp": 0,
+                    "fp": 10,
+                    "fn": 6,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0.0,
+                    "support": 6
+                },
+                "Conversion": {
+                    "tp": 0,
+                    "fp": 0,
+                    "fn": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0.0,
+                    "support": 1
+                },
+                "Cotreatment": {
+                    "tp": 8,
+                    "fp": 17,
+                    "fn": 6,
+                    "precision": 0.32,
+                    "recall": 0.5714285714285714,
+                    "f1": 0.41025641025641024,
+                    "support": 14
+                },
+                "Drug_Interaction": {
+                    "tp": 0,
+                    "fp": 0,
+                    "fn": 2,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0.0,
+                    "support": 2
+                },
+                "Negative_Correlation": {
+                    "tp": 81,
+                    "fp": 267,
+                    "fn": 90,
+                    "precision": 0.23275862068965517,
+                    "recall": 0.47368421052631576,
+                    "f1": 0.3121387283236994,
+                    "support": 171
+                },
+                "Positive_Correlation": {
+                    "tp": 198,
+                    "fp": 530,
+                    "fn": 127,
+                    "precision": 0.27197802197802196,
+                    "recall": 0.6092307692307692,
+                    "f1": 0.3760683760683761,
+                    "support": 325
+                }
+            }
+        }
+    }
+}
+{
+    "model_name": "relations-bert_bioformers-bioformer-8L_2026-07-01_22-52-43_BioRed_micro/checkpoint-2088",
+    "model": "relations-bert_bioformers-bioformer-8L_2026-07-01_22-52-43_BioRed_micro/checkpoint-2088",
+    "dataset": "BioRed",
+    "f1_average": "micro",
+    "metrics": {
+        "loss": 0.9777770042419434,
+        "accuracy": 0.6775580395528805,
+        "precision": 0.372979670504596,
+        "recall": 0.3668472367010915,
+        "f1_micro": 0.6775580395528805,
+        "f1_macro": 0.36763030325166146,
+        "f1_weighted": 0.6754129749805942
+    },
+    "actual_metrics": {
+        "metric": "biored_f1",
+        "description": "Pooled over the 8 positive relation types; rows where gold and prediction are both NoRelation are not scored at all.",
+        "checkpoint": "relations-bert_bioformers-bioformer-8L_2026-07-01_22-52-43_BioRed_micro/checkpoint-2088",
+        "base_model": "bioformers/bioformer-8L",
+        "eval_split": "Test.PubTator",
+        "eval_dataset": "BioRed",
+        "eval_variant": "matched_norelation",
+        "eval_rows": 2326,
+        "biored_precision": 0.548748921484038,
+        "biored_recall": 0.5468615649183147,
+        "biored_f1": 0.5478036175710593,
+        "tp": 636,
+        "fp": 523,
+        "fn": 527,
+        "micro_f1_all_classes": 0.6775580395528805,
+        "macro_f1_all_classes": 0.36763030325166146,
+        "negative_discrimination": {
+            "tp": 936,
+            "fp": 223,
+            "fn": 227,
+            "tn": 940,
+            "accuracy": 0.8065348237317282,
+            "precision": 0.8075927523727351,
+            "recall": 0.8048151332760103,
+            "f1": 0.8062015503875969
+        },
+        "per_class": {
+            "Association": {
+                "tp": 352,
+                "fp": 237,
+                "fn": 283,
+                "precision": 0.597623089983022,
+                "recall": 0.5543307086614173,
+                "f1": 0.5751633986928105,
+                "support": 635
+            },
+            "Bind": {
+                "tp": 0,
+                "fp": 0,
+                "fn": 9,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 9
+            },
+            "Comparison": {
+                "tp": 2,
+                "fp": 5,
+                "fn": 4,
+                "precision": 0.2857142857142857,
+                "recall": 0.3333333333333333,
+                "f1": 0.30769230769230765,
+                "support": 6
+            },
+            "Conversion": {
+                "tp": 0,
+                "fp": 0,
+                "fn": 1,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 1
+            },
+            "Cotreatment": {
+                "tp": 8,
+                "fp": 4,
+                "fn": 6,
+                "precision": 0.6666666666666666,
+                "recall": 0.5714285714285714,
+                "f1": 0.6153846153846153,
+                "support": 14
+            },
+            "Drug_Interaction": {
+                "tp": 0,
+                "fp": 0,
+                "fn": 2,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 2
+            },
+            "Negative_Correlation": {
+                "tp": 69,
+                "fp": 67,
+                "fn": 102,
+                "precision": 0.5073529411764706,
+                "recall": 0.40350877192982454,
+                "f1": 0.4495114006514658,
+                "support": 171
+            },
+            "Positive_Correlation": {
+                "tp": 205,
+                "fp": 210,
+                "fn": 120,
+                "precision": 0.4939759036144578,
+                "recall": 0.6307692307692307,
+                "f1": 0.5540540540540541,
+                "support": 325
+            }
+        },
+        "full_norelation_test": {
+            "eval_split": "Test.PubTator",
+            "eval_variant": "full_norelation",
+            "eval_rows": 10097,
+            "biored_precision": 0.22052704576976423,
+            "biored_recall": 0.5468615649183147,
+            "biored_f1": 0.3143068939955523,
+            "tp": 636,
+            "fp": 2248,
+            "fn": 527,
+            "micro_f1_all_classes": 0.7548776864415173,
+            "macro_f1_all_classes": 0.2798530870194982,
+            "negative_discrimination": {
+                "tp": 936,
+                "fp": 1948,
+                "fn": 227,
+                "tn": 6986,
+                "accuracy": 0.7845894820243636,
+                "precision": 0.3245492371705964,
+                "recall": 0.8048151332760103,
+                "f1": 0.4625648628613788
+            },
+            "per_class": {
+                "Association": {
+                    "tp": 352,
+                    "fp": 1440,
+                    "fn": 283,
+                    "precision": 0.19642857142857142,
+                    "recall": 0.5543307086614173,
+                    "f1": 0.2900700453234446,
+                    "support": 635
+                },
+                "Bind": {
+                    "tp": 0,
+                    "fp": 6,
+                    "fn": 9,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0.0,
+                    "support": 9
+                },
+                "Comparison": {
+                    "tp": 2,
+                    "fp": 7,
+                    "fn": 4,
+                    "precision": 0.2222222222222222,
+                    "recall": 0.3333333333333333,
+                    "f1": 0.26666666666666666,
+                    "support": 6
+                },
+                "Conversion": {
+                    "tp": 0,
+                    "fp": 0,
+                    "fn": 1,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0.0,
+                    "support": 1
+                },
+                "Cotreatment": {
+                    "tp": 8,
+                    "fp": 16,
+                    "fn": 6,
+                    "precision": 0.3333333333333333,
+                    "recall": 0.5714285714285714,
+                    "f1": 0.4210526315789474,
+                    "support": 14
+                },
+                "Drug_Interaction": {
+                    "tp": 0,
+                    "fp": 0,
+                    "fn": 2,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0.0,
+                    "support": 2
+                },
+                "Negative_Correlation": {
+                    "tp": 69,
+                    "fp": 223,
+                    "fn": 102,
+                    "precision": 0.2363013698630137,
+                    "recall": 0.40350877192982454,
+                    "f1": 0.2980561555075594,
+                    "support": 171
+                },
+                "Positive_Correlation": {
+                    "tp": 205,
+                    "fp": 556,
+                    "fn": 120,
+                    "precision": 0.26938239159001315,
+                    "recall": 0.6307692307692307,
+                    "f1": 0.3775322283609576,
+                    "support": 325
+                }
+            }
+        }
+    }
+}

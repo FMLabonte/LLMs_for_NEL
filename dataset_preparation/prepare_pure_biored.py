@@ -178,20 +178,26 @@ def build_pure_biored_samples(
     distance_stats: dict[str, float] | None = None,
     relation_types: list[str] = BIORED_RELATION_TYPES,
     seed: int = 42,
+    no_relation_ratio: float | None = 1.0,
     verbose: bool = True,
 ) -> list[TrainingSample]:
     """Build gold + distance-matched ``NoRelation`` samples for pure BioRED.
 
-    For every abstract all gold relations are kept and, on top of them, up to the
-    same number of ``NoRelation`` examples are added. Candidate unrelated pairs
-    are restricted to a distance no larger than the observed maximum and ranked
-    by closeness to the observed mean related-entity distance.
+    For every abstract all gold relations are kept and, on top of them, up to
+    ``no_relation_ratio`` times as many ``NoRelation`` examples are added.
+    Candidate unrelated pairs are restricted to a distance no larger than the
+    observed maximum and ranked by closeness to the observed mean related-entity
+    distance.
 
     Args:
         distance_stats: Pre-computed output of
             :func:`compute_relation_distance_stats`. Computed on the fly when
             omitted.
         seed: Seed used only to break ties between equally mean-close candidates.
+        no_relation_ratio: How many ``NoRelation`` examples to keep per gold
+            relation of an abstract. ``None`` keeps *every* co-mentioned unrelated
+            pair and switches off the distance cap, which is the realistic
+            evaluation setting (all candidate pairs of a document are judged).
     """
     rng = random.Random(seed)
     if distance_stats is None:
@@ -253,14 +259,20 @@ def build_pure_biored_samples(
                 info_a = entity_index[(pmid, a_id)]
                 info_b = entity_index[(pmid, b_id)]
                 distance = entity_pair_distance(info_a["spans"], info_b["spans"])
-                if distance is None or distance > max_distance:
+                if distance is None:
+                    continue
+                if no_relation_ratio is not None and distance > max_distance:
                     continue
                 candidates.append((a_id, b_id, info_a, info_b, distance))
 
-        rng.shuffle(candidates)
-        candidates.sort(key=lambda candidate: abs(candidate[4] - mean_distance))
+        if no_relation_ratio is None:
+            kept = candidates
+        else:
+            rng.shuffle(candidates)
+            candidates.sort(key=lambda candidate: abs(candidate[4] - mean_distance))
+            kept = candidates[: int(round(no_relation_ratio * n_gold))]
 
-        for a_id, b_id, info_a, info_b, _ in candidates[:n_gold]:
+        for a_id, b_id, info_a, info_b, _ in kept:
             samples.append(
                 TrainingSample(
                     pmid=pmid,
@@ -289,6 +301,7 @@ def build_pure_biored_dataframe(
     pubtator_file: str | Path,
     relation_types: list[str] = BIORED_RELATION_TYPES,
     seed: int = 42,
+    no_relation_ratio: float | None = 1.0,
     verbose: bool = True,
 ) -> pd.DataFrame:
     """Parse a BioRED PubTator file and return a rels-like DataFrame.
@@ -303,6 +316,7 @@ def build_pure_biored_dataframe(
         rels_df,
         relation_types=relation_types,
         seed=seed,
+        no_relation_ratio=no_relation_ratio,
         verbose=verbose,
     )
     return samples_to_rels_like_df(samples)
