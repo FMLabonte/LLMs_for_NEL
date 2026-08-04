@@ -61,3 +61,66 @@ The synthetic model is more conservative: at its best epoch it has higher precis
 The synthetic model also peaks earlier (matched at epoch 1, all rels. at epoch 4) and then overfits the synthetic phrasing, so more epochs do not help.
 
 Per-epoch source data: `epoch_biored_metric.json` (synthetic run dir) and `epoch_curves.csv` (previous runs).
+
+## Secondary table: full per-epoch metrics
+
+All values are the BioRED metric on the real BioRED Test split.
+P = precision, R = recall, F1 as above; TP/FP/FN are the pooled positive-relation counts.
+Best F1 per column is in **bold**.
+
+### matched variant (2,326 rows)
+
+Previous (real BioRED):
+
+| Epoch | P | R | F1 | TP | FP | FN |
+|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| 1  | 0.508 | 0.476 | 0.492 | 554 | 536 | 609 |
+| 2  | 0.596 | 0.579 | 0.587 | 673 | 457 | 490 |
+| 3  | 0.589 | 0.497 | 0.539 | 578 | 403 | 585 |
+| 4  | 0.610 | 0.576 | 0.592 | 670 | 429 | 493 |
+| 5  | 0.644 | 0.633 | **0.638** | 736 | 407 | 427 |
+| 6  | 0.630 | 0.623 | 0.627 | 725 | 425 | 438 |
+| 7  | 0.638 | 0.624 | 0.631 | 726 | 412 | 437 |
+| 8  | 0.623 | 0.615 | 0.619 | 715 | 433 | 448 |
+| 9  | 0.621 | 0.578 | 0.599 | 672 | 410 | 491 |
+| 10 | 0.628 | 0.592 | 0.609 | 688 | 408 | 475 |
+
+Current (synthetic Qwen3-8B):
+
+| Epoch | P | R | F1 | TP | FP | FN |
+|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| 1 | 0.595 | 0.552 | **0.573** | 642 | 437 | 521 |
+| 2 | 0.635 | 0.472 | 0.541 | 549 | 316 | 614 |
+| 3 | 0.592 | 0.506 | 0.546 | 588 | 405 | 575 |
+| 4 | 0.647 | 0.420 | 0.509 | 488 | 266 | 675 |
+| 5 | 0.618 | 0.422 | 0.502 | 491 | 304 | 672 |
+
+### all rels. variant (10,097 rows)
+
+Previous (real BioRED):
+
+| Epoch | P | R | F1 | TP | FP | FN |
+|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| 1  | 0.234 | 0.476 | 0.314 | 554 | 1814 | 609 |
+| 2  | 0.259 | 0.579 | 0.358 | 673 | 1927 | 490 |
+| 3  | 0.274 | 0.497 | 0.353 | 578 | 1532 | 585 |
+| 4  | 0.271 | 0.576 | 0.368 | 670 | 1807 | 493 |
+| 5  | 0.291 | 0.633 | **0.399** | 736 | 1792 | 427 |
+| 6  | 0.279 | 0.623 | 0.385 | 725 | 1874 | 438 |
+| 7  | 0.283 | 0.624 | 0.389 | 726 | 1842 | 437 |
+| 8  | 0.270 | 0.615 | 0.375 | 715 | 1935 | 448 |
+| 9  | 0.279 | 0.578 | 0.376 | 672 | 1736 | 491 |
+| 10 | 0.279 | 0.592 | 0.379 | 688 | 1780 | 475 |
+
+Current (synthetic Qwen3-8B):
+
+| Epoch | P | R | F1 | TP | FP | FN |
+|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| 1 | 0.254 | 0.552 | 0.348 | 642 | 1887 | 521 |
+| 2 | 0.320 | 0.472 | 0.381 | 549 | 1167 | 614 |
+| 3 | 0.282 | 0.506 | 0.362 | 588 | 1501 | 575 |
+| 4 | 0.363 | 0.420 | **0.389** | 488 | 856 | 675 |
+| 5 | 0.323 | 0.422 | 0.366 | 491 | 1029 | 672 |
+
+The precision/recall split is the clearest signal.
+The synthetic model reaches its best all rels. F1 with far fewer false positives than the previous model (856 vs 1,792 at their best epochs), i.e. higher precision, at the cost of lower recall.
