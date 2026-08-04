@@ -7,6 +7,7 @@
 \usepackage{amssymb}
 \usepackage{xcolor}
 \usepackage{tikz}
+\usepackage[absolute,overlay]{textpos}
 \usetikzlibrary{arrows.meta,positioning}
 \definecolor{accent}{HTML}{2A4D7A}
 \definecolor{warn}{HTML}{B23A1E}
@@ -22,8 +23,6 @@
 \newcommand{\bert}[1]{\textbf{BERT\,#1}}
 \newcommand{\y}{\textcolor{good}{\checkmark}}
 \newcommand{\n}{\textcolor{warn}{\ensuremath{\times}}}
-\newcommand{\todo}{\textcolor{warn}{\textbf{TODO}}}
-\newcommand{\cbar}[1]{\textcolor{accent}{\rule{#1}{5pt}}}
 
 \title{\textbf{Quality Control for Synthetic Biomedical Relation Data}}
 \subtitle{Midterm presentation}
@@ -35,7 +34,11 @@
 
 \begin{frame}[plain]\titlepage\end{frame}
 
-% ---------------------------------------------------------------- problem
+% ================================================================
+% ==================  HAMED'S HALF (5 slides)  ===================
+% ================================================================
+
+% ---------------------------------------------------------------- 1. problem + idea
 \begin{frame}{The problem, and the idea}
   \textbf{Problem.} Biomedical relation extractors need labelled data, but expert
   datasets are tiny. Synthetic abstracts from an LLM are cheap, but we cannot trust
@@ -61,7 +64,7 @@
   \end{center}
 \end{frame}
 
-% ---------------------------------------------------------------- dataset
+% ---------------------------------------------------------------- 2. dataset
 \begin{frame}{The dataset: perturbed BioRED}
   We build QC training data from real BioRED relations. A gold relation is a
   positive; controlled corruptions are negatives. Four classes: \tc{Association},
@@ -73,10 +76,11 @@
         \item \tc{label\_flip}: wrong relation label (full 4$\times$4 matrix)
         \item \tc{direction\_swap}: reversed order (Pos/Neg only)
         \item \tc{fp\_external}: entity not in the abstract
+        \item \tc{NoRelation} negatives are \textbf{distance-matched} (sentence gap),
+              so the model cannot cheat on ``far apart $=$ unrelated''
       \end{itemize}
       \vspace{0.3em}
       Train 54{,}424 rows, seed 42, byte-reproducible, label-1 $\approx$15\%.
-      {\small\itshape (run 2 resamples this for training: see slide 8.)}
     \end{column}
     \begin{column}{0.48\textwidth}
       \includegraphics[width=\linewidth]{figures/01_rows_per_perturbation.png}
@@ -84,68 +88,30 @@
   \end{columns}
 \end{frame}
 
-% ---------------------------------------------------------------- 4x4
-\begin{frame}{\tc{label\_flip} over the full 4$\times$4 matrix}
-  Every off-diagonal flip is a negative, including specific $\to$ \tc{Association}
-  (the LLM may soften a correlation to association-level wording).
-  \vspace{0.4em}
-  \begin{center}
-  \begin{tabular}{l|cccc|c}
-    \toprule
-    gold $\downarrow$ & As & Po & Ne & NoR & \# valid\\
-    \midrule
-    \tc{Association}          & -- & \y & \y & \y & 3\\
-    \tc{Positive\_Correlation} & \y & -- & \y & \y & 3\\
-    \tc{Negative\_Correlation} & \y & \y & -- & \y & 3\\
-    \tc{NoRelation}           & \y & \y & \y & -- & 3\\
-    \bottomrule
-  \end{tabular}
-  \end{center}
-  \vspace{0.3em}
-  {\small The \tc{$\to$NoR} column drops a real relation; the \tc{NoR$\to$} row claims
-  one that is not there; specific $\to$ \tc{Association} weakens the label. All are
-  mistakes the QC model must catch.}
-\end{frame}
-
-% ---------------------------------------------------------------- norelation
-\begin{frame}{\tc{NoRelation}: distance-matched negatives}
-  Co-mentioned non-pairs outnumber real relations $\approx$6.6:1 and sit farther
-  apart. Sampling them raw teaches ``far apart $=$ no relation''. We distance-match
-  (by \textbf{sentence gap}) and cap them.
-  \begin{center}
-    \includegraphics[width=0.86\textwidth]{figures/norel_distance.png}
-  \end{center}
-  {\small Real related pairs (green) are usually in the same sentence; \tc{NoRelation}
-  pairs (red) are a sentence or more apart.}
-\end{frame}
-
-% ---------------------------------------------------------------- QC model
-\begin{frame}{The QC model (\bert{2})}
-  \begin{itemize}
-    \item \textbf{Task:} claimed triple + abstract $\to$ supported (1) / unsupported (0).
-    \item \textbf{Prompt:} \tc{Relation: A -> rel -> B} then \tc{Context: <abstract>}.
-    \item \textbf{Model:} PubMedBERT, binary head.
-    \item \textbf{Objective: precision, not F1} (synthetic data is cheap, so a strict
-          filter is what we want).
-  \end{itemize}
-  \vspace{0.5em}
-  {\small Two evaluations: intrinsic (does it work on the test set) and extrinsic
-  (does filtering help \bert{1}).}
-\end{frame}
-
-% ---------------------------------------------------------------- run 1
-\begin{frame}{Run 1: the pipeline works, but ...}
+% ---------------------------------------------------------------- 3. run 1 -> run 2
+\begin{frame}{Run 1 $\to$ Run 2: fixing the imbalance}
   \begin{columns}[T]
     \begin{column}{0.55\textwidth}
-      First PubMedBERT run, test set:
-      \begin{itemize}
-        \item @0.5: precision \textbf{0.87}, recall \textbf{0.51}, F1 0.64
-        \item precision-first threshold: precision 0.97, recall 0.28
-      \end{itemize}
+      \small
+      \textbf{Run 1} (first PubMedBERT run), test @0.5:
+      precision \textbf{0.87}, recall \textbf{0.51}, F1 \textbf{0.64}.
+      \vspace{0.3em}
+
+      The data is $\approx$15\% positive, so the model had little incentive to accept
+      real relations. It leaned toward ``no relation'' (recall 0.51).
       \vspace{0.4em}
-      \textbf{The catch:} recall 0.51. The data is $\approx$15\% positive / 85\%
-      negative, so the model has little incentive to accept real relations. It was
-      leaning toward ``no relation''.
+
+      \textbf{Fix} (training only): cut \tc{fp\_external} to 25\% and duplicate the
+      gold rows. Positive share \textbf{15\% $\to$ 34\%}.
+      \vspace{0.4em}
+
+      \textbf{Run 2}, test @0.5:
+      precision \textbf{0.68}, recall \textbf{0.73}, F1 \textbf{0.71}.
+      Recall jumps, precision drops, no longer degenerate.
+      \vspace{0.3em}
+
+      By type, real relations stay the hard part (gold recall $\approx$0.55)
+      while \tc{NoRelation} is easy (0.89).
     \end{column}
     \begin{column}{0.45\textwidth}
       \includegraphics[width=\linewidth]{figures/run1_vs_run2.png}
@@ -153,32 +119,7 @@
   \end{columns}
 \end{frame}
 
-% ---------------------------------------------------------------- run 2
-\begin{frame}{Run 2: fixing the imbalance}
-  \textbf{Fix (training only):} reduce \tc{fp\_external} to 25\% and duplicate the
-  positive (gold) rows. Positive share 15\% $\to$ 34\%. Result: recall
-  \textbf{0.51 $\to$ 0.73}, precision 0.87 $\to$ 0.68, F1 0.64 $\to$ 0.71; no longer
-  just predicting ``no''.
-  \begin{center}
-    \includegraphics[width=0.74\textwidth]{figures/training_composition.png}
-  \end{center}
-\end{frame}
-
-% ---------------------------------------------------------------- diagnosis
-\begin{frame}{Diagnosis: real relations are the hard part}
-  \begin{columns}[T]
-    \begin{column}{0.5\textwidth}
-      Gold recall broken down by the claimed relation type. The model accepts
-      \tc{NoRelation} claims easily, but the real relations lag. It is learning them
-      now ($\approx$55\%), just not as well.
-    \end{column}
-    \begin{column}{0.5\textwidth}
-      \includegraphics[width=\linewidth]{figures/gold_recall_by_type.png}
-    \end{column}
-  \end{columns}
-\end{frame}
-
-% ---------------------------------------------------------------- abstract level
+% ---------------------------------------------------------------- 4. abstract-level
 \begin{frame}{Abstract-level evaluation}
   The filter judges a \emph{whole abstract}, not one pair: reject the abstract if
   $\ge N$ of its relations are flagged as wrong.
@@ -207,19 +148,38 @@
   \end{columns}
 \end{frame}
 
-% ---------------------------------------------------------------- classifier
-% \begin{frame}{The relation classifier (\bert{1}, Chris)}
-%   \begin{itemize}
-%     \item PubMedBERT classifier reproducing the BioRED baseline.
-%     \item The paper's F1 is computed unusually: micro-F1 that excludes the
-%           \tc{NoRelation} class from positive scoring.
-%     \item Recomputed the same way, our classifier is $\approx$\textbf{44\%}, a
-%           realistic baseline. We underperform state of the art a bit, but now we have
-%           a number to close the gap against.
-%   \end{itemize}
-% \end{frame}
+% ---------------------------------------------------------------- 5. what I did next (needs figures/task1_pass_by_relcount.png)
+\begin{frame}{What I did next, and what is left}
+  \begin{columns}[T]
+    \begin{column}{0.56\textwidth}
+      \small
+      \textbf{Done} (supervisor's first ask: profile the passers)
+      \begin{itemize}
+        \item The 19\% that pass are \textbf{not shorter} (median 241 vs 237 words) but
+              have \textbf{far fewer relations}: pass rate \textbf{47\%} at 1--3
+              relations, \textbf{2\%} at 10+ (relation-count biased, not length biased).
+        \item No-retraining levers (dynamic threshold, lower cut-off) each buy only
+              $\approx$\textbf{+5 points}: recall is the real wall.
+      \end{itemize}
+      \vspace{0.2em}
+      \textbf{Next}
+      \begin{itemize}
+        \item Retrain for higher real-relation recall (real golds duplicated, class
+              weights / focal loss).
+        \item \textbf{Extrinsic test} when the synthetic data arrives: does filtering
+              help \bert{1}?
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.44\textwidth}
+      \includegraphics[width=\linewidth]{figures/task1_pass_by_relcount.png}
+    \end{column}
+  \end{columns}
+\end{frame}
 
-% ================================================================ BERT 1 part
+% ================================================================
+% ==============  CHRIS'S HALF (unchanged, do not edit)  =========
+% ================================================================
+
 \begin{frame}[plain]
   \begin{center}
     {\Large\bfseries\color{accent} The Relation Classifier in Detail}\\[0.4em]
@@ -229,7 +189,7 @@
 
 % ---------------------------------------------------------------- task
 \begin{frame}{The Task and the Prompt}
-  Same task as the BioRED baseline: Name the \textbf{relation} between two \textbf{entities} that are already linked, with the \textbf{abstract} as context.
+  Same task as the BioRED baseline: Provided two \textbf{entities} with the \textbf{abstract} as context, name the \textbf{relation} between them.
   \begin{itemize}
     \item \textbf{9-way} classification problem (8 BioRED relation types plus \tc{NoRelation})
     \item Currently \textbf{one pair} per forward pass% -- the model never sees the other candidate pairs of the abstract.
@@ -256,12 +216,14 @@
   \begin{itemize}
     % \item A candidate is any entity pair co-mentioned in an abstract but not linked by a gold relation.
     \item No relations are generated using \textbf{two entities} that \textbf{appear} in the abstract but are \textbf{not related}.
-    \pause
+        \pause
+        
     \item To balance the dataset only a \textbf{subset} of the possible no relations is used.
     \pause
-    \item It is \textbf{measured how far} apart \textbf{related} entities are on \tc{Train}\footnote{mean 73.8 characters, median 37.0, max 1{,}599}.
+    \item It is \textbf{measured how far} apart \textbf{related} entities are on \tc{Train} split\footnote{mean 73.8 characters, median 37.0, max 1{,}599}.
+
     \pause
-    \item Per abstract everything above that maximum is dropped, the rest is \textbf{sorted by closeness} to the mean, and keep as many as the abstract has gold relations.
+    \item Per abstract everything is \textbf{sorted by closeness} to the mean and as many as the abstract has gold relations are kept. Above that maximum distance pairs are dropped.
     \pause
     \item Prevents the model from mostly learning ``far apart $=$ no relation''.
   \end{itemize}
@@ -318,17 +280,37 @@
     \end{column}
   \end{columns}
   \vspace{1em}
-  {A fresh classification head is attached on top of the encoder. The input is cut off at 512 word pieces.}
+  {A fresh \textbf{classification head} is \textbf{attached} on top of the encoder. The input is cut off at 512 word pieces.}
 \end{frame}
 
 % ---------------------------------------------------------------- eval trap
 \begin{frame}{Evaluation Real F1 vs BioRED F1}
-  The BioRED paper doesnt specifiy which type of f1 score they used.\\
-  Micro-F1 over all nine classes was assumed.
-  
-  Instead it's a special-case micro-F1 that \textbf{ignores} the \tc{NoRelation} class.
+
+	\only<4|handout:2>{
+		\begin{textblock}{12.3}(0.755, 1.65)
+			\includegraphics[width=.9\textheight]{figures/f1-score.jpg}
+		\end{textblock}
+	}
+
+  The BioRED paper doesnt specifiy which type of F1 score they used.\\
+  \pause
+  \textbf{Micro-F1} over all nine classes was \textbf{assumed}.
+  \pause
+
+  \vspace{0.4em}
+
+    \textbf{Our} F1 results were \textbf{higher} than the BioRED results.
+
+  \vspace{0.4em}
+\pause
+\pause
+  Instead it's a \textbf{special}-case micro-F1 that \textbf{ignores} the \tc{NoRelation} class.
+\pause
+
+  $\rightarrow$ We rewarded the ability to say 'no', which BioRED doesn't.
+
+
   % Our \tc{compute\_metrics} used plain micro-F1 over all nine classes, which \textbf{gives a point for exactly those rows}.
-  \vspace{0.3em}
   % \begin{center}
   % \small
   % \begin{tabular}{l|lcc}
@@ -345,7 +327,6 @@
   % \end{center}
   % \vspace{0.3em}
 
-  {\small \textbf{The Real f1 results were higher, because we rewarded the ability to say 'no'}.}
 \end{frame}
 
 % ---------------------------------------------------------------- results
@@ -400,9 +381,9 @@
   \small
   
   \setlength{\tabcolsep}{5pt}
-  \begin{tabular}{l|lccc}
+  \begin{tabular}{l|rrr}
     \toprule
-    model & training data & micro-F1 (9 cls.) & BioRED F1 & BioRED F1, all rels.\\
+    model & micro-F1 (9 cls.) & BioRED F1 & BioRED F1, all rels.\\
     \midrule
     % PROVENANCE of every number in this table
     % ----------------------------------------
@@ -431,8 +412,8 @@
     % Provenance: no model was retrained. All numbers come from finetuning/epoch_curves.csv,
     % produced by finetuning/epoch_curves.py, which scores all 40 checkpoints on both splits.
     % The rows that existed before are reproduced by that sweep to the last digit.
-    PubMedBERT   & BioRED           & 0.724 & 0.619 & 0.375\\
-    Bioformer-8L & BioRED           & 0.675 & 0.530 & 0.312\\
+    PubMedBERT              & 0.724 & 0.619 & 0.375\\
+    Bioformer-8L           & 0.675 & 0.530 & 0.312\\
     \bottomrule
   \end{tabular}
   \end{center}
@@ -440,9 +421,12 @@
 
   \begin{itemize}
     % \item Taking away the free \tc{NoRelation} hits \textbf{costs about 10 points}: 0.724 $\to$ 0.619 for PubMedBERT.
+    \item \emph{all rels.} adds $\approx$ 8k new \emph{NoRelation} entries, reducing the \textbf{Precision} by more than \textbf{half} from $0.623$ to $0.270$.
+    
     \item PubMedBERT stays \textbf{ahead} of Bioformer-8L in every column.
-    \item Column \textbf{three} evaluates on the \textbf{balanced} test set, \textbf{column four} uses \textbf{every candidate relation} in the abstract.
-          
+    % \item Column \textbf{three} evaluates on the \textbf{balanced} test set, \textbf{column four} uses \textbf{every candidate relation} in the abstract.
+
+
   \end{itemize}
 \end{frame}
 
@@ -470,7 +454,7 @@
     \includegraphics[width=0.80\textwidth]{figures/biored_f1_per_epoch_all_runs_with_micro.png}
   \end{center}
   \vspace{-0.6em}
-  {\small \textbf{Nothing learned after epoch 4-5}
+  {\small \textbf{No} real \textbf{progress} after epoch 4-5
   % A solid and its dashed line are the same checkpoints on more candidate pairs.
 
   All checkpoints were also \textbf{scored on \tc{Dev}} and yielded nearly the \textbf{same} results.
@@ -515,30 +499,7 @@
 % split where we build 10,097 (0.3% difference, presumably the distance cap that we drop when
 % all negatives are requested). Close enough to compare, not close enough to call identical.
 %
-\begin{frame}{Impact of classifiying all relations in an abstract}
 
-  \vspace{0.4em}
-  \begin{center}
-  \small
-  \setlength{\tabcolsep}{4.5pt}
-  \begin{tabular}{l|rrrrrr}
-    \toprule
-    test set (PubMedBERT, BioRED) & entries & real rel. & no-relation & precision & recall & F1\\
-    \midrule
-    one \tc{NoRelation} per gold relation & 2{,}326 & 1{,}163 & 1{,}163 & 0.623 & 0.615 & 0.619\\
-    all co-mentioned pairs              & 10{,}097 & 1{,}163 & 8{,}934 & 0.270 & 0.615 & 0.375\\
-    \bottomrule
-  \end{tabular}
-  \end{center}
-  \vspace{0.4em}
-  {\small 
-  %The 1{,}163 real relations are the same rows in both lines, only the negatives grow.
-  %Recall therefore cannot change, extra negatives do not hide a true relation.
-  \textbf{Precision more than halves}: the model claims a relation on 1{,}697 of the 8{,}934 unrelated pairs, 19\%.
-
-  \textbf{Recall is unchanged}: \textbf{715} of the \textbf{1{,}163} real relations are classified correctly (61.5\%) in both settings.}
-
-\end{frame}
 
 % ---------------------------------------------------------------- validation
 %
@@ -611,8 +572,15 @@
     \item \textbf{Wrong score.}
           The metric problem from the slide before, which made everything look better than it was.
     \item \textbf{Comparing different results.} Comparing results, created by different test-sets is not clever.
-    \item \textbf{Score all relations} Can't just score one \tc{NoRelation} per gold relation, must score all co-mentioned pairs.
-    \item \textbf{Forgetting the NoRelation entries.} (:
+    \item \textbf{Score all relations}. Can't just score one \tc{NoRelation} per gold relation, must score all co-mentioned pairs.
+    %\pause
+ %    	\only<2|handout:2>{
+	% 	\begin{textblock}{12.3}(0.755, 1.65)
+	% 		\includegraphics[width=1.43\textheight]{figures/gru.jpg}
+	% 	\end{textblock}
+	% }
+  \pause
+    \item \textbf{Forgetting to include NoRelation entries at all.} (:
     \end{itemize}
 \end{frame}
 
@@ -630,36 +598,29 @@
 \begin{frame}{Next steps for \bert{1}}
   \begin{enumerate}
     % \item \textbf{Train on the realistic negative set} instead of the balanced one, and report that number.
-    \item \textbf{Synthetic data:} train on the LLM-generated abstracts.
-    \item \textbf{Filtered synthetic data:} train on whatever the QC model (\bert{2}) keeps.
-    \item \textbf{Compare to the baseline.} See how the model perfomes, based on the different training sets.
-    \item \textbf{Bonus:} Find out why we're below the BioRED baseline.
+    %\item \textbf{Perturbed BioRED:} retrain in the fixed pipeline and see how far it lands from the baseline.
+    \item \textbf{Synthetic data:} Train on the LLM-generated abstracts.
+    \item \textbf{Filtered synthetic data:} Train on whatever the QC model (\bert{2}) keeps.
+    % \item \textbf{Compare to the baseline:} See how the model perfomes, based on the different training sets.
+    \item \textbf{Test BioFormer-16L:} Doesn't cost much compute, worth a try.
     \item \textbf{Check the abstract-level filter} vs. abstract length and number of
-          relations (e.g. make sure it is not only short abstracts passing).
+          relations\\
+          (e.g. make sure it is not only short abstracts passing).
+    \item \textbf{Bonus:} Find out why we're below the BioRED baseline.
   \end{enumerate}
   \vspace{0.4em}
 \end{frame}
 
+% ================================================================
+% ==================  SHARED CLOSING SLIDE  =====================
+% ================================================================
+\begin{frame}{ Thank you. Questions?}
+  \begin{center}
+      \includegraphics[height=0.9\textheight]{figures/bert.jpg}
+  \end{center}
 
-% ---------------------------------------------------------------- summary
-\begin{frame}{Summary}
-  \begin{center}\large Thank you. Questions?\end{center}
 \end{frame}
 
-% ---------------------------------------------------------------- bonus
-%
-% All numbers are the Dev-selected checkpoint of each run (the one the training pipeline
-% saved to <run>_dump): PubMedBERT epoch 8, Bioformer-8L epoch 9. Evaluation is the
-% all-pairs setting: every co-mentioned entity pair of the 100 Test abstracts, 10,097 rows
-% of which 1,163 are real relations. Source: finetuning/epoch_curves.csv and .json.
-%
-% Reading aids for questions:
-%   - FP splits into pairs claimed as a relation that are not one, and real relations given
-%     the wrong type. The second kind also books an FN, so a wrong type costs twice.
-%   - "Relation vs. none" ignores the type entirely: did the model notice something is there.
-%     Both models sit near 0.50, so half of that decision is wrong before typing even starts.
-%   - micro-F1 is high only because 88% of the rows are pairs the model correctly rejects.
-%
 \begin{frame}{Bonus: all numbers, all co-mentioned pairs}
   {\small Scored on all 10{,}097 co-mentioned pairs of the 100 \tc{Test} abstracts: 1{,}163 real relations, 8{,}934 unrelated pairs.}
   \vspace{0.2em}
@@ -686,12 +647,39 @@
     micro-F1 (9 classes) & 0.788 & 0.769\\
     macro-F1 (9 classes) & 0.392 & 0.259\\
     ``relation vs.\ none'' F1 & 0.500 & 0.469\\
-    \midrule
-    F1 \tc{Association} ($n$ 635) & 0.341 & 0.285\\
-    F1 \tc{Positive\_Corr.} ($n$ 325) / \tc{Negative\_Corr.} ($n$ 171) & 0.409 / 0.419 & 0.376 / 0.312\\
+    % \midrule
+    % F1 \tc{Association} ($n$ 635) & 0.341 & 0.285\\
+    % F1 \tc{Positive\_Correlation} ($n$ 325) & 0.409 & 0.376\\
+    % F1 \tc{Negative\_Correlation} ($n$ 171) & 0.419 & 0.312\\
     \bottomrule
   \end{tabular}
   \end{center}
+\end{frame}
+
+\begin{frame}{Impact of classifiying all relations in an abstract}
+
+  Looking at one example: PubMedBERT, BioRED F1, best epoch.
+  \vspace{0.4em}
+  \begin{center}
+  \small
+  \setlength{\tabcolsep}{4.5pt}
+  \begin{tabular}{l|rrrrrr}
+    \toprule
+    test set (PubMedBERT, BioRED) & entries & real rel. & no-relation & precision & recall & F1\\
+    \midrule
+    one \tc{NoRelation} per gold relation & 2{,}326 & 1{,}163 & 1{,}163 & 0.623 & 0.615 & 0.619\\
+    all co-mentioned pairs              & 10{,}097 & 1{,}163 & 8{,}934 & 0.270 & 0.615 & 0.375\\
+    \bottomrule
+  \end{tabular}
+  \end{center}
+  \vspace{0.4em}
+  {\small 
+  %The 1{,}163 real relations are the same rows in both lines, only the negatives grow.
+  %Recall therefore cannot change, extra negatives do not hide a true relation.
+  \textbf{Precision} more than \textbf{halves}: the model claims a relation on 1{,}697 of the 8{,}934 unrelated pairs, 19\%.
+
+  \textbf{Recall} is \textbf{unchanged}: \textbf{715} of the \textbf{1{,}163} real relations are classified correctly (61.5\%) in both settings.}
+
 \end{frame}
 
 \end{document}
