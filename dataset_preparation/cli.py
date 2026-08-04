@@ -21,20 +21,12 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from build_dataset import build_split
+from build_dataset import build_perturbed_dataframe
 from data_loader import SPLIT_FILES, load_biored_split, summarize
-from perturbations import BIORED_RELATION_TYPES, SYMMETRIC_RELATIONS
+from perturbations import BIORED_RELATION_TYPES, DIRECTIONAL_RELATIONS, TOP_RELATION_TYPES
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT_DIR = _REPO_ROOT / "output"
-
-app = typer.Typer(
-    help="BioRED Phase 1 data pipeline: load, perturb, inspect.",
-    no_args_is_help=True,
-    add_completion=False,
-    rich_markup_mode="rich",
-)
-console = Console()
 
 
 # ---------------------------------------------------------------------------
@@ -49,11 +41,10 @@ class Split(str, Enum):
 
 
 class Perturbation(str, Enum):
-    gold           = "gold"
-    label_flip     = "label_flip"
-    direction_swap = "direction_swap"
-    false_positive = "false_positive"
-    false_negative = "false_negative"
+    gold             = "gold"
+    label_flip       = "label_flip"
+    direction_swap   = "direction_swap"
+    fp_external      = "fp_external"
 
 
 def _resolve_splits(split: Split) -> list[str]:
@@ -76,6 +67,15 @@ def _load_built_csv(split: str, output_dir: Path) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
+
+app = typer.Typer(
+    help="BioRED Phase 1 data pipeline: load, perturb, inspect.",
+    no_args_is_help=True,
+    add_completion=False,
+    rich_markup_mode="rich",
+)
+console = Console()
+
 
 @app.command()
 def inspect(
@@ -111,8 +111,11 @@ def inspect(
         console.print(f"\n[bold]Entity types (from train):[/bold]   {info['entity_types']}")
         console.print(f"[bold]Relation types (from train):[/bold] {info['relation_types']}")
         console.print(
-            f"[dim]Symmetric relations (direction-swap skipped):[/dim] "
-            f"{sorted(SYMMETRIC_RELATIONS)}"
+            f"[dim]Kept relation types (default, reduced):[/dim] {sorted(TOP_RELATION_TYPES)}"
+        )
+        console.print(
+            f"[dim]Directional relations (direction-swap applied to):[/dim] "
+            f"{sorted(DIRECTIONAL_RELATIONS)}"
         )
 
 
@@ -133,13 +136,13 @@ def build(
         help="Output directory for the CSVs.",
     ),
 ) -> None:
-    """Build the perturbed (gold + 4-perturbation) CSV(s)."""
+    """Build the perturbed (4-class gold + perturbation) CSV(s)."""
     out.mkdir(parents=True, exist_ok=True)
     splits = _resolve_splits(split)
 
     for s in splits:
         console.print(f"\n[bold cyan]Building {s}[/bold cyan]")
-        df = build_split(
+        df = build_perturbed_dataframe(
             s,
             seed=seed,
             type_restricted_false_positives=not no_type_restrict,

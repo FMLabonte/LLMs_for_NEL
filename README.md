@@ -15,6 +15,7 @@ A binary classifier that filters LLM-generated synthetic biomedical training dat
   - [Commands](#commands)
   - [Examples](#examples)
   - [How to add new commands](#how-to-add-new-commands)
+- [Perturbation taxonomy](#perturbation-taxonomy)
 - [Repository structure](#repository-structure)
 - [Direct parser usage (without the CLI)](#example-to-run-the-demo)
 
@@ -73,7 +74,7 @@ If you only need the data-pipeline parts and not the model training, `pip instal
 
 ```bash
 conda activate cpu-only
-cd code/
+cd dataset_preparation/
 python cli.py inspect          # raw BioRED stats (papers, entities, relations)
 python cli.py build            # generate perturbed CSVs in ../output/
 python cli.py stats            # per-perturbation breakdown of the CSVs
@@ -82,7 +83,7 @@ python cli.py peek -n 3        # eyeball a few sample rows
 
 ## Phase 1 CLI
 
-Single entry point at [code/cli.py](code/cli.py). Run `python cli.py --help` for the full list. Built with [Typer](https://typer.tiangolo.com/), so every command and flag is type-validated.
+Single entry point at [dataset_preparation/cli.py](dataset_preparation/cli.py). Run `python cli.py --help` for the full list. Built with [Typer](https://typer.tiangolo.com/), so every command and flag is type-validated.
 
 ### Commands
 
@@ -112,19 +113,18 @@ python cli.py peek dev -n 5 -p direction_swap
 python cli.py peek train -p gold -l 1
 ```
 
-The 4 perturbation types you can filter on:
+The perturbation types you can filter on (see [PERTURBATIONS.md](PERTURBATIONS.md) for full definitions and worked examples):
 
 | Perturbation | Label | What changes |
 |---|---|---|
-| `gold` | 1 | unchanged BioRED relation |
-| `label_flip` | 0 | relation type changed to a different one |
-| `direction_swap` | 0 | entity_A and entity_B swapped (skipped for symmetric relations: `Association`, `Comparison`) |
-| `false_positive` | 0 | invented a relation between two co-mentioned, currently-unrelated entities |
-| `false_negative` | 0 | claimed `NoRelation` for a relation that actually exists |
+| `gold` | 1 | a true (entity_pair, relation) example; includes `NoRelation` golds (genuinely-unrelated pairs) |
+| `label_flip` | 0 | relation type changed to another valid class over the 4-class matrix (includes to/from `NoRelation`) |
+| `direction_swap` | 0 | entity_A and entity_B swapped (only `Positive_Correlation`, `Negative_Correlation`) |
+| `fp_external` | 0 | entity_B replaced with an entity not in the abstract (the in-abstract fp families were dropped; they overlapped the `NoRelation` -> relation flips) |
 
 ### How to add new commands
 
-The CLI is a single file, [code/cli.py](code/cli.py). To add a new subcommand, follow the same pattern as the existing five.
+The CLI is a single file, [dataset_preparation/cli.py](dataset_preparation/cli.py). To add a new subcommand, follow the same pattern as the existing ones.
 
 **Steps:**
 
@@ -167,21 +167,29 @@ After saving, `python cli.py --help` lists the new command automatically. Run `p
 - Default to `Split.all` for stat-style commands (inspect, stats, validate), and `Split.train` for sampling commands (peek).
 - Every command must have a one-line docstring; that's the description shown in the top-level `--help`.
 
+## Perturbation taxonomy
+
+The canonical list of perturbation types, with stable names and the LLM error each one targets, lives in [PERTURBATIONS.md](PERTURBATIONS.md) (single source of truth).
+
+Treat the names listed there (`gold`, `label_flip`, `direction_swap`, `fp_external`) as the stable vocabulary used in CSV columns, metric slices, and reports. The four gold classes are `Association`, `Positive_Correlation`, `Negative_Correlation`, and `NoRelation`.
+
 ## Repository structure
 
 ```
 LLMs_for_NEL/
 ├── README.md                        ← you are here
+├── PERTURBATIONS.md                 ← canonical perturbation taxonomy (single source of truth)
 ├── cpu-env.yml                      ← conda environment spec
 ├── pubtator_parser.py               ← raw PubTator -> 3 DataFrames (meta, anns, rels)
 ├── Data/
 │   ├── BioRED/                      ← main dataset (Train/Dev/Test in PubTator + JSON + XML)
 │   ├── CDR_Data/                    ← Chemical-Disease RE (older baseline)
 │   └── MedMention/                  ← entity mentions only (reference)
-├── code/
+├── dataset_preparation/
+│   ├── __init__.py
 │   ├── cli.py                       ← Typer entry point (see above)
 │   ├── data_loader.py               ← BioRED loader (wraps pubtator_parser)
-│   ├── perturbations.py             ← TrainingSample dataclass + 4 perturbation generators
+│   ├── perturbations.py             ← TrainingSample + 7 perturbation labels (see PERTURBATIONS.md)
 │   └── build_dataset.py             ← library: build_split, assert_known_relation_types
 └── output/                          ← generated CSVs (gitignored)
 ```

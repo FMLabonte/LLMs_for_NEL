@@ -397,3 +397,12 @@ presentation/*.out
 presentation/*.snm
 presentation/*.synctex.gz
 presentation/*.toc
+# LaTeX build artifacts (commit only the .tex source and the .pdf output)
+docs/*.aux
+docs/*.log
+docs/*.out
+docs/*.toc
+docs/*.synctex.gz
+docs/*.fdb_latexmk
+docs/*.fls
+
