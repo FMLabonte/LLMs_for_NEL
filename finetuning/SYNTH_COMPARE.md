@@ -1,35 +1,37 @@
 # Synthetic vs. real BioRED: PubMedBERT relation classifier
 
-Comparison of two PubMedBERT relation classifiers that differ only in the source of the training abstracts.
 Both are scored on the same held-out real BioRED Test split with the BioRED F1 metric.
 
 ## Methodology
 
-Both runs use the identical 9-class setup (8 BioRED relation types plus `NoRelation`), the same prompt format (`Relation: A -> [MASK] -> B` + `Context: <abstract>`), the same distance-matched negative sampling (distance statistics fit on the real BioRED Train split), and the same held-out real BioRED Test split.
-The BioRED F1 scorer is pooled over the 8 positive relation types and ignores rows where gold and prediction are both `NoRelation`.
+- Both runs use the same distance-matched negative sampling (distance statistics fit on the real BioRED Train split)
+    - calculated individually for both datasets tho...
 
-Two evaluation variants are reported, exactly as in the presentation:
+- evaluated on the same held-out real BioRED Test split.
+
+### Evaluation metrics
 
 - **matched**: one distance-matched `NoRelation` example per gold relation (2,326 rows = 1,163 gold + 1,163 `NoRelation`).
+
 - **all rels.**: every co-mentioned unrelated pair of the test abstracts (10,097 rows = 1,163 gold + 8,934 `NoRelation`).
 
-### How the current run differs from the original
+### Comparison
 
 | Aspect | Previous (real BioRED) | Current (synthetic Qwen3-8B) |
 |---|---|---|
 | Abstract text | Real BioRED Train abstracts | LLM-generated abstracts (Qwen3-8B), entities/relations still from BioRED |
-| Training rows | 1 abstract per paper | 3 generations per paper (context augmentation), 25,002 samples |
-| Validation / selection | Real BioRED **Dev**, best checkpoint selected on Dev micro-F1 | **None** (no synthetic Dev split exists); no checkpoint selected |
-| Between-epoch eval | On | Off (`ENABLE_EVAL_BETWEEN_EPOCHS = False`) |
+| Training rows | 1 abstract per paper | 3 generations per paper, 25,002 samples |
+| Validation / selection | Real BioRED **Dev**, best checkpoint picked on micro-F1 | None, no synthetic Dev split exists |
+| Between-epoch eval | On | Off |
 | Epochs | 10 | 5 |
-| Test split | Real BioRED Test | Real BioRED Test (unchanged, for comparability) |
+| Test split | Real BioRED Test | Real BioRED Test |
 
-Everything else is held constant, so the difference in scores is attributable to the abstract source (plus the 3x augmentation and the absence of checkpoint selection).
-Because the current run has no synthetic Dev split, its epochs are reported un-selected, whereas the presentation quotes the previous model at the Dev-selected checkpoint (epoch 8: matched 0.619, all rels. 0.375).
+
+The synthetic epochs are reported unselected. The previous model is quoted at its Dev-picked checkpoint (epoch 8: matched 0.619, all rels. 0.375).
 
 ## Epoch-wise comparison (BioRED F1, real BioRED Test)
 
-Best value per column is in **bold**.
+Best **BioRED F1** per column is in **bold**.
 
 | Epoch | Prev. matched | Prev. all rels. | Synth. matched | Synth. all rels. |
 |:-:|:-:|:-:|:-:|:-:|
@@ -53,24 +55,27 @@ Best per model:
 
 ## Takeaways
 
-On the **matched** metric the synthetic model trails the real-BioRED model (best 0.573 vs 0.638).
-On the **all rels.** metric the two are close (best 0.389 vs 0.399), and the synthetic model even beats the previous model's Dev-selected value of 0.375.
+On the **matched** metric the synthetic model stay behinf the real one (0.573 vs 0.638 best).
 
-The two models reach their all-rels. score differently.
-The synthetic model is more conservative: at its best epoch it has higher precision (0.363) and lower recall (0.420), whereas the real-BioRED model has low precision (0.291) and high recall (0.633).
-The synthetic model also peaks earlier (matched at epoch 1, all rels. at epoch 4) and then overfits the synthetic phrasing, so more epochs do not help.
+On **all rels.** they are close (0.389 vs 0.399 best), and synthetic beats the previous model's Dev-picked 0.375.
 
-Per-epoch source data: `epoch_biored_metric.json` (synthetic run dir) and `epoch_curves.csv` (previous runs).
+The all-rels. score is reached differently.
 
-## Secondary table: full per-epoch metrics
+Synthetic is more conservative: at its best epoch **precision** is **0.363** and **recall 0.420**, against **0.291** / **0.633** for the **real** one.
 
-All values are the BioRED metric on the real BioRED Test split.
-P = precision, R = recall, F1 as above; TP/FP/FN are the pooled positive-relation counts.
-Best F1 per column is in **bold**.
+Synthetic also peaks early (matched at epoch 1, all rels. at epoch 4).
+
+Per-epoch source data: `finetuning/relations-bert_NeuML-pubmedbert-base-embeddings_2026-08-04_21-41-09_BioRed_synthetic_micro/epoch_biored_metric` (synthetic run dir) and `./finetuning/epoch_curves.json` (original runs).
+
+## Full per-epoch metrics
+
+BioRED metric on the real BioRED Test split.
+P = precision, R = recall; TP/FP/FN are the pooled positive-relation counts.
+Best **BioRED F1** per column in **bold** (the `F1` column: pooled precision/recall/F1 over the 8 positive relation types, ignoring pairs where gold and prediction are both `NoRelation`).
 
 ### matched variant (2,326 rows)
 
-Previous (real BioRED):
+#### real BioRED:
 
 | Epoch | P | R | F1 | TP | FP | FN |
 |:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -85,7 +90,7 @@ Previous (real BioRED):
 | 9  | 0.621 | 0.578 | 0.599 | 672 | 410 | 491 |
 | 10 | 0.628 | 0.592 | 0.609 | 688 | 408 | 475 |
 
-Current (synthetic Qwen3-8B):
+#### synthetic Qwen3-8B:
 
 | Epoch | P | R | F1 | TP | FP | FN |
 |:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -97,7 +102,7 @@ Current (synthetic Qwen3-8B):
 
 ### all rels. variant (10,097 rows)
 
-Previous (real BioRED):
+#### real BioRED:
 
 | Epoch | P | R | F1 | TP | FP | FN |
 |:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -112,7 +117,7 @@ Previous (real BioRED):
 | 9  | 0.279 | 0.578 | 0.376 | 672 | 1736 | 491 |
 | 10 | 0.279 | 0.592 | 0.379 | 688 | 1780 | 475 |
 
-Current (synthetic Qwen3-8B):
+####  synthetic Qwen3-8B
 
 | Epoch | P | R | F1 | TP | FP | FN |
 |:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -123,4 +128,4 @@ Current (synthetic Qwen3-8B):
 | 5 | 0.323 | 0.422 | 0.366 | 491 | 1029 | 672 |
 
 The precision/recall split is the clearest signal.
-The synthetic model reaches its best all rels. F1 with far fewer false positives than the previous model (856 vs 1,792 at their best epochs), i.e. higher precision, at the cost of lower recall.
+The **synthetic** model reaches its best all rels. F1 with **far fewer false positives** than the previous model (856 vs 1,792 at their best epochs), i.e. higher precision, at the cost of lower recall.
