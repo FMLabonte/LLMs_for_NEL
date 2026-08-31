@@ -1,0 +1,113 @@
+{
+  "cutoff": 0.5,
+  "nested": true,
+  "levels": [
+    {
+      "name": "L0_strict",
+      "kind": "rate",
+      "tau": 0.0,
+      "note": "no detected error at all, the 2026-08-24 shipped rule"
+    },
+    {
+      "name": "L1_rate10",
+      "kind": "rate",
+      "tau": 0.1,
+      "note": "up to 10% of the claims may be rejected"
+    },
+    {
+      "name": "L2_rate20",
+      "kind": "rate",
+      "tau": 0.2,
+      "note": "up to 20%"
+    },
+    {
+      "name": "L3_rate33",
+      "kind": "rate",
+      "tau": 0.33,
+      "note": "up to a third"
+    },
+    {
+      "name": "L4_rate50",
+      "kind": "rate",
+      "tau": 0.5,
+      "note": "up to half"
+    },
+    {
+      "name": "L5_unfiltered",
+      "kind": "rate",
+      "tau": 1.0,
+      "note": "everything, the baseline Chris already has"
+    },
+    {
+      "name": "D_dynamic",
+      "kind": "dynamic",
+      "tau": null,
+      "note": "the step function from decide.py, kept for continuity"
+    }
+  ],
+  "table": [
+    {
+      "level": "L0_strict",
+      "tolerated error rate": "0%",
+      "abstracts kept": 1083,
+      "kept %": 30.5,
+      "train abstracts": 807,
+      "papers in train": 190,
+      "note": "no detected error at all, the 2026-08-24 shipped rule"
+    },
+    {
+      "level": "L1_rate10",
+      "tolerated error rate": "10%",
+      "abstracts kept": 1195,
+      "kept %": 33.7,
+      "train abstracts": 903,
+      "papers in train": 221,
+      "note": "up to 10% of the claims may be rejected"
+    },
+    {
+      "level": "L2_rate20",
+      "tolerated error rate": "20%",
+      "abstracts kept": 1620,
+      "kept %": 45.7,
+      "train abstracts": 1232,
+      "papers in train": 278,
+      "note": "up to 20%"
+    },
+    {
+      "level": "L3_rate33",
+      "tolerated error rate": "33%",
+      "abstracts kept": 1983,
+      "kept %": 55.9,
+      "train abstracts": 1488,
+      "papers in train": 317,
+      "note": "up to a third"
+    },
+    {
+      "level": "L4_rate50",
+      "tolerated error rate": "50%",
+      "abstracts kept": 2900,
+      "kept %": 81.8,
+      "train abstracts": 2053,
+      "papers in train": 371,
+      "note": "up to half"
+    },
+    {
+      "level": "L5_unfiltered",
+      "tolerated error rate": "100%",
+      "abstracts kept": 3546,
+      "kept %": 100.0,
+      "train abstracts": 2358,
+      "papers in train": 393,
+      "note": "everything, the baseline Chris already has"
+    },
+    {
+      "level": "D_dynamic",
+      "tolerated error rate": "step fn",
+      "abstracts kept": 1260,
+      "kept %": 35.5,
+      "train abstracts": 952,
+      "papers in train": 232,
+      "note": "the step function from decide.py, kept for continuity"
+    }
+  ]
+}

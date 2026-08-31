@@ -386,3 +386,8 @@ docs/*.fls
 
 # Synthetic abstracts unpacked from the zip next to it
 Data/Synthetic abstracts/
+
+# Materialized acceptance-level JSONs: ~150 MB of near-duplicate data, fully
+# determined by acceptance_levels.csv. Rebuild with materialize.py.
+qc_filtering/acceptance_levels/*/
+qc_filtering/acceptance_levels/materialized.csv
