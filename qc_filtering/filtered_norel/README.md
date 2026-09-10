@@ -42,7 +42,33 @@ filter looked at. Mean claims per abstract goes from 9.7 to 39.1.
 Overall 1,083 abstracts kept becomes 615, so 30.5% becomes 17.3%. 468 abstracts that
 passed before fail now, with a median of 3 failed implicit claims each.
 
-## Two things to know before reading a training result
+## Read this before interpreting anything: the set is close to a size filter
+
+468 of the 1,083 abstracts that passed the old filter fail here, **43% of them, and every
+one fails purely on NoRelation**. Their stated relations were all fine by construction.
+
+What survives is not what is well written:
+
+| | median implicit pairs | mean |
+|---|---|---|
+| all abstracts | 10 | 29.4 |
+| **survivors** | **1** | **2.5** |
+| lost on NoRelation | 7 | 12.6 |
+
+**228 of the 615 survivors have no implicit pairs at all**, so nothing could fail them.
+
+The arithmetic makes this unavoidable. The QC model false-alarms on roughly 15% of
+negatives, and an abstract with `k` implicit pairs survives at about `0.85^k`: 20% at ten
+pairs, 0.5% at thirty-two. Any abstract with a normal number of entities is rejected
+almost regardless of quality.
+
+So this set mostly selects abstracts with few entities. That is the same bias as the
+original filter selecting papers with few relations, but sharper, because implicit pairs
+outnumber stated ones roughly three to one. **A drop in downstream performance on this set
+is not evidence that the synthetic data is bad, and a gain is not evidence that the filter
+works.** Treat it as the experiment Fred asked for rather than as a better dataset.
+
+## Two further things to know before reading a training result
 
 **1. The set is much smaller, and that is a confound on its own.** The 8B train file drops
 from 501 abstracts over 212 papers to 220 over 87. Any difference against the old filtered
