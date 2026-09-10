@@ -176,33 +176,68 @@ def main():
     abs_df["rel_band"] = pd.qcut(abs_df.n_relations, 3,
                                  labels=["few", "medium", "many"])
 
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.2), sharey=True)
-    for band, colour in zip(["short", "medium", "long"], ["#4C72B0", "#DD8452", "#55A868"]):
-        sub = abs_df[abs_df.len_band == band]
-        b = binned(sub.n_relations, sub.error_rate, rel_edges)
-        axes[0].plot(b.centre, b["mean"], marker="o", markersize=4, color=colour,
-                     label=f"{band} abstracts")
-    axes[0].set_xlim(0, float(np.quantile(abs_df.n_relations, 0.98)) * 1.03)
-    axes[0].set_xlabel("relations asserted")
-    axes[0].set_ylabel("errors / relations")
-    axes[0].set_title("Relation count, holding length band fixed")
+    # Legibility matters more than correctness here. The first version of this
+    # figure was right and still could not be read at a glance, because each
+    # panel's legend names the variable that is NOT on its x-axis. So: spell the
+    # bands out as real ranges, put the question in the panel title and the
+    # answer in the subtitle, and print the measured swing on the panel.
+    def band_ranges(col, band_col, labels):
+        out = {}
+        for lab in labels:
+            v = abs_df.loc[abs_df[band_col] == lab, col]
+            out[lab] = (int(v.min()), int(v.max()))
+        return out
 
-    for band, colour in zip(["few", "medium", "many"], ["#4C72B0", "#DD8452", "#55A868"]):
-        sub = abs_df[abs_df.rel_band == band]
+    len_r = band_ranges("abstract_words", "len_band", ["short", "medium", "long"])
+    rel_r = band_ranges("n_relations", "rel_band", ["few", "medium", "many"])
+    colours = ["#4C72B0", "#DD8452", "#55A868"]
+
+    def swing(sub, xcol, edges):
+        """First to last surviving bin, so the panel states its own effect size."""
+        b = binned(sub[xcol], sub.error_rate, edges)
+        return b["mean"].iloc[-1] - b["mean"].iloc[0] if len(b) > 1 else float("nan")
+
+    fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.6), sharey=True)
+
+    swings = []
+    for lab, colour in zip(["short", "medium", "long"], colours):
+        sub = abs_df[abs_df.len_band == lab]
+        b = binned(sub.n_relations, sub.error_rate, rel_edges)
+        lo, hi = len_r[lab]
+        axes[0].plot(b.centre, b["mean"], marker="o", markersize=4, color=colour,
+                     label=f"abstracts of {lo} to {hi} words")
+        swings.append(swing(sub, "n_relations", rel_edges))
+    axes[0].set_xlim(0, float(np.quantile(abs_df.n_relations, 0.98)) * 1.03)
+    axes[0].set_xlabel("x axis: relations asserted in the abstract")
+    axes[0].set_ylabel("errors / relations")
+    axes[0].set_title("Vary the relation count, hold length fixed\n"
+                      f"every band climbs, by {min(swings):+.2f} to {max(swings):+.2f}",
+                      fontsize=10)
+
+    swings = []
+    for lab, colour in zip(["few", "medium", "many"], colours):
+        sub = abs_df[abs_df.rel_band == lab]
         b = binned(sub.abstract_words, sub.error_rate, len_edges)
+        lo, hi = rel_r[lab]
         axes[1].plot(b.centre, b["mean"], marker="o", markersize=4, color=colour,
-                     label=f"{band} relations")
+                     label=f"abstracts with {lo} to {hi} relations")
+        swings.append(swing(sub, "abstract_words", len_edges))
     axes[1].set_xlim(float(np.quantile(abs_df.abstract_words, 0.01)) * 0.95,
                      float(np.quantile(abs_df.abstract_words, 0.99)) * 1.03)
-    axes[1].set_xlabel("abstract length (words)")
-    axes[1].set_title("Length, holding relation-count band fixed")
+    axes[1].set_xlabel("x axis: abstract length in words")
+    axes[1].set_title("Vary the length, hold relation count fixed\n"
+                      f"every band is near flat, {min(swings):+.2f} to {max(swings):+.2f}",
+                      fontsize=10)
 
     for ax in axes:
-        ax.set_ylim(0, 1)
-        ax.legend(frameon=False, fontsize=8)
+        ax.set_ylim(0, 0.75)
+        ax.legend(frameon=False, fontsize=8, loc="upper left")
         ax.spines[["top", "right"]].set_visible(False)
+    fig.suptitle("The driver is the relation count, not the length",
+                 fontsize=12, fontweight="bold", y=1.0)
     fig.tight_layout()
-    fig.savefig(FIG_DIR / "error_rate_disentangled.png", dpi=200)
+    fig.savefig(FIG_DIR / "error_rate_disentangled.png", dpi=200,
+                bbox_inches="tight")
     plt.close(fig)
 
     r_rel, p_rel = spearman(abs_df.n_relations, abs_df.error_rate)

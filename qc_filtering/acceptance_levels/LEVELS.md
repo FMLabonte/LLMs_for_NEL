@@ -18,15 +18,28 @@ suspected noise is tolerated.
 
 | level         | tolerated error rate   |   abstracts kept |   kept % |   train abstracts |   papers in train | note                                                  |
 |:--------------|:-----------------------|-----------------:|---------:|------------------:|------------------:|:------------------------------------------------------|
-| L0_strict     | 0%                     |             1083 |     30.5 |               807 |               190 | no detected error at all, the 2026-08-24 shipped rule |
+| L0_strict     | 0%                     |             1083 |     30.5 |               807 |               190 | no detected error at all, the strictest level          |
 | L1_rate10     | 10%                    |             1195 |     33.7 |               903 |               221 | up to 10% of the claims may be rejected               |
 | L2_rate20     | 20%                    |             1620 |     45.7 |              1232 |               278 | up to 20%                                             |
 | L3_rate33     | 33%                    |             1983 |     55.9 |              1488 |               317 | up to a third                                         |
 | L4_rate50     | 50%                    |             2900 |     81.8 |              2053 |               371 | up to half                                            |
 | L5_unfiltered | 100%                   |             3546 |    100   |              2358 |               393 | everything, the baseline Chris already has            |
-| D_dynamic     | step fn                |             1260 |     35.5 |               952 |               232 | the step function from decide.py, kept for continuity |
+| D_dynamic     | step fn                |             1260 |     35.5 |               952 |               232 | the 2026-08-24 shipped rule, the step function from decide.py |
 
 Rate levels nest correctly: **True**.
+
+## A number here does not match SUMMARY.md, and that is expected
+
+The shipped rule is the dynamic step function with rare types excluded, which is the
+`D_dynamic` row. `SUMMARY.md` and `README.md` report it as 1,307 abstracts kept of
+3,552; the row above says 1,260 of 3,546. Neither is wrong, they use different
+conventions for `rares=exclude`. `decide.py` keeps rare-type rows in an abstract's
+relation count and only stops counting them as failures, so an abstract survives with
+its full denominator. `acceptance_levels.py` and `error_rate_analysis.py` drop those
+rows entirely, so the same abstract is judged on fewer claims and six abstracts lose
+every claim they had, which is where 3,552 becomes 3,546. Both reproduce their own
+outputs exactly. Never mix a number from one file with a number from the other in the
+report or in a slide.
 
 ## Kept per split
 
