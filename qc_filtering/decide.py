@@ -20,9 +20,13 @@ Outputs, into filtered/:
   results_qwen3_*_{train,dev,test}.json   Fred's schema, generations pruned to
                                           the ones that passed. Drops straight
                                           into Chris's load_synthetic_abstracts.
-  random_qwen3_*_{train,dev,test}.json    same-size random control, seed 42, so
-                                          "QC picked well" can be told apart
-                                          from "the set got smaller"
+  random_qwen3_*_{train,dev,test}.json    same-size random control, seed 42.
+                                          NOT SHIPPED since 2026-09-10: it matches
+                                          on abstract count only, so the control
+                                          ends up with ~50% more distinct papers
+                                          than the filtered set and two things vary
+                                          at once. Match papers as well before
+                                          using this output for anything.
   abstract_decisions.csv                  one row per synthetic abstract
   SUMMARY.md                              the numbers, all four rule combos
 """
@@ -83,7 +87,11 @@ def _ensure_synthetic_dir() -> Path:
 
 def export(decisions: pd.DataFrame, tag: str) -> list[str]:
     """Write Fred-schema JSONs holding only the kept generations, plus a
-    same-size random control drawn from the same papers."""
+    same-size random control drawn from the whole unfiltered pool.
+
+    The control matches on abstract count only. It is not matched on papers, so it
+    carries more distinct source papers than the filtered set. See the README before
+    using it."""
     FILTERED.mkdir(exist_ok=True)
     rng = random.Random(SEED)
     lines = []

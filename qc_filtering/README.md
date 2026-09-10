@@ -34,10 +34,20 @@ files were checked against that function before being written here.
 | `filtered/results_qwen3_8b_dev.json` | 28 | 71 | 24.1% |
 | `filtered/results_qwen3_8b_test.json` | 34 | 82 | 27.3% |
 
-`filtered/random_qwen3_*.json` are **same-size random controls**, drawn from the same
-papers with seed 42 and no reference to the QC scores. Fred asked for this arm
-explicitly. Without it, a win for the filtered set cannot be told apart from an
-effect of simply training on a smaller, less repetitive set.
+**The `filtered/random_qwen3_*.json` controls were removed on 2026-09-10.** They were
+never used: Christoph trained on the `results_*` files and built his own random arm. They
+were also flawed. They matched the filtered set on abstract count but not on paper count,
+501 abstracts from 319 papers against 501 from 212, because the sampler drew from the whole
+unfiltered pool rather than from a matched set of papers. That leaves two things varying at
+once, and the extra paper diversity favours the control, so the comparison was biased
+against the filter.
+
+The arm itself is still needed, and Fred asked for it explicitly: without a same-size
+control, a win for the filtered set cannot be told apart from an effect of training on a
+smaller set. A correct one has to match **both** axes, drawn as N random papers taking the
+same per-paper generation counts as the filtered set. `decide.py` still contains the old
+single-axis sampler; do not ship its output without fixing that first. The removed files
+remain in git history at `ac42a50`.
 
 `filtered/paper_ids_{train,dev,test}.txt` list the BioRED papers the synthetic data was
 generated from, for the matched-real arm. Fred was explicit that the real side
@@ -63,11 +73,10 @@ barely differs, 175 words against 202. The cause is arithmetic rather than
 anything semantic: per-claim recall is about 0.73, so an abstract with k claims
 survives at roughly 0.73^k.
 
-The consequence for the comparison is concrete. The filtered train file and its
-random control hold the same number of abstracts, but the filtered one carries
-about 30% fewer gold relations, because it selected simpler papers. A win for
-the filtered arm therefore cannot be attributed to data quality alone without
-saying this out loud.
+The consequence for any comparison is concrete. A filtered set and an equally sized
+unfiltered one do not carry the same content: the filtered train file holds about 30%
+fewer gold relations, because it selected simpler papers. A win for the filtered arm
+therefore cannot be attributed to data quality alone without saying this out loud.
 
 **2. Rare relation types were excluded from the rejection count.** Fred generated
 from the full BioRED relation set, so 18.8% of the synthetic abstracts assert at
