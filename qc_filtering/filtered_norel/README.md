@@ -28,9 +28,12 @@ An abstract is kept when **no** claim fails at cut-off 0.5, counting both:
 That is the same strict rule as before. The only thing that changed is which claims the
 filter looked at. Mean claims per abstract goes from 9.7 to 39.1.
 
+This folder is the `passed_strict` column of `../abstract_decisions_norel.csv`.
+
 **If you are comparing against the `../filtered/` arm, use `../filtered_norel_dynamic/`
-instead.** This folder is strict, that arm is dynamic, so a comparison against it moves
-the rule and the claim set at once. Added 2026-09-13, see that folder's README.
+instead.** That arm is dynamic and this folder is strict, so a comparison against it moves
+the rule and the claim set at once. The dynamic folder holds the rule constant and is the
+drop-in Frederik asked for. Added 2026-09-13, see its README.
 
 ## What it costs
 

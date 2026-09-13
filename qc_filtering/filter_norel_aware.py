@@ -5,18 +5,31 @@ Every co-mentioned entity pair that the prompt does not put in a relation is imp
 NoRelation claim, and none of those were scored, so a relation the generator invented
 could not be caught. Frederik asked at meeting 10 for at least one run that includes them.
 
-An abstract is kept here when NONE of its claims fails, counting both sides:
+Both claim sets are judged:
 
   * the stated relations, from synthetic_relation_scores.csv, rare types excluded
     because the QC model was never trained on them,
   * the implicit NoRelation pairs, from the overnight scoring run.
 
-That is the same strict rule Christoph's "QC dedup" arm already uses, so the only thing
-that changes between his existing run and this one is which claims the filter looked at.
+Two decision columns, two output folders:
 
-Output mirrors filtered/ exactly, same schema, so it is a path change on his side:
+  passed         the dynamic step function, same rule decide.py applies in
+                 abstract_decisions.csv  ->  filtered_norel_dynamic/
+  passed_strict  no claim may fail at all  ->  filtered_norel/
 
-  filtered_norel/results_qwen3_*_{train,dev,test}.json
+`passed` is the one to use. Christoph's QC arm is the dynamic set, so judging the
+implicit pairs under the strict rule would change the rule and the claim set at the
+same time and his before/after would measure two things at once. Under `passed` the
+rule is held constant and only the claim set moves, which is the comparison Frederik
+asked for at meeting 10. `passed_strict` stays because filtered_norel/ is built from
+it and he has already been given its 30.5% -> 17.3% figure.
+
+NOTE: `passed` means 1,307 in abstract_decisions.csv and 779 here. Same rule, different
+claims. Never quote the number without naming the file.
+
+Both folders mirror filtered/ exactly, same schema, so it is a path change downstream:
+
+  filtered_norel_dynamic/results_qwen3_*_{train,dev,test}.json
 
 Run:
     python filter_norel_aware.py
@@ -66,30 +79,27 @@ def failures_per_abstract() -> pd.DataFrame:
     d["failed_total"] = d.failed_stated + d.failed_implicit
     d["n_total"] = d.n_stated + d.n_implicit
 
-    # Strict: no claim may fail. The two columns shipped on 2026-09-10.
-    d["keep_stated_only"] = d.failed_stated == 0
-    d["keep_norel_aware"] = d.failed_total == 0
+    # `passed` means the same thing here as in abstract_decisions.csv: the dynamic
+    # step function decided it. The only difference between the two files is which
+    # claims were judged, stated relations there, stated plus implicit NoRelation
+    # pairs here. That is deliberate, so the before/after comparison holds the rule
+    # constant. It also means the number differs between the files, 1,307 there and
+    # 779 here, so never quote `passed` without saying which file it came from.
+    d["passed"] = d.failed_total <= d.n_total.map(allowed_errors)
 
-    # Dynamic: the same step function `passed` uses, now judging both claim sets.
-    # Added 2026-09-13, because Christoph's QC arm is the dynamic set and not the
-    # strict one, so a strict-only norel file changes the rule and the claim set at
-    # the same time and his before/after comparison measures two things at once.
-    #
-    # Two readings of "the same rule", both kept because they cost the same:
-    #   full    allowance scales with everything judged, so the extra false-alarm
-    #           exposure from ~29 implicit pairs is compensated. Literal reading.
-    #   stated  allowance stays on the stated count, so the July budget is untouched
-    #           and the only change is that more claims can spend it. Conservative.
-    d["keep_norel_dynamic"] = d.failed_total <= d.n_total.map(allowed_errors)
-    d["keep_norel_dyn_stated"] = d.failed_total <= d.n_stated.map(allowed_errors)
+    # The strict rule, kept because ../filtered_norel/ is built from it and Frederik
+    # has already been given its 30.5% -> 17.3% figure.
+    d["passed_strict"] = d.failed_total == 0
     return d
 
 
-def write_filtered(d: pd.DataFrame, column: str, out_dir: Path,
-                   before_col: str = "keep_stated_only") -> list[str]:
-    """Write Fred-schema JSONs holding only the generations `column` keeps."""
+def write_filtered(d: pd.DataFrame, column: str, out_dir: Path) -> dict[tuple, tuple]:
+    """Write Fred-schema JSONs holding only the generations `column` keeps.
+
+    Returns {(model, split): (abstracts_total, kept, papers_kept, papers_total)}.
+    """
     out_dir.mkdir(exist_ok=True)
-    lines = []
+    counts = {}
     for path in sorted(SYN_DIR.glob("results_qwen3_*.json")):
         model, split = path.stem.replace("results_", "").rsplit("_", 1)
         papers = json.loads(path.read_text())
@@ -104,13 +114,8 @@ def write_filtered(d: pd.DataFrame, column: str, out_dir: Path,
                 kept_papers.append({**p, "synthetic_abstracts": gens})
                 n_kept += len(gens)
         (out_dir / path.name).write_text(json.dumps(kept_papers, indent=1))
-
-        before = int(sub[before_col].sum())
-        total = len(sub)
-        lines.append(
-            f"| {model} | {split} | {total} | {before} ({before/total*100:.1f}%) | "
-            f"{n_kept} ({n_kept/total*100:.1f}%) | {len(kept_papers)} / {papers.__len__()} |")
-    return lines
+        counts[(model, split)] = (len(sub), n_kept, len(kept_papers), len(papers))
+    return counts
 
 
 def main():
@@ -121,31 +126,29 @@ def main():
     print(f"mean claims per abstract: stated {d.n_stated.mean():.1f} -> "
           f"{(d.n_stated + d.n_implicit).mean():.1f} with implicit\n")
 
-    a, b = int(d.keep_stated_only.sum()), int(d.keep_norel_aware.sum())
-    print(f"kept, stated relations only : {a:,} of {len(d):,} ({a/len(d)*100:.1f}%)")
-    print(f"kept, NoRelation aware      : {b:,} of {len(d):,} ({b/len(d)*100:.1f}%)")
+    # Derived, not shipped as columns: the stated-only verdicts live in
+    # abstract_decisions.csv (dynamic) and acceptance_levels.csv (L0_strict).
+    stated_strict = int((d.failed_stated == 0).sum())
+    p, s = int(d.passed.sum()), int(d.passed_strict.sum())
+    print(f"kept, strict, stated only  : {stated_strict:,} of {len(d):,} "
+          f"({stated_strict/len(d)*100:.1f}%)   [= L0_strict]")
+    print(f"kept, strict  (passed_strict): {s:,} ({s/len(d)*100:.1f}%)")
+    print(f"kept, dynamic (passed)       : {p:,} ({p/len(d)*100:.1f}%)")
 
-    lost = d[d.keep_stated_only & ~d.keep_norel_aware]
-    print(f"\nabstracts that passed before and fail now: {len(lost):,}")
+    lost = d[(d.failed_stated == 0) & ~d.passed_strict]
+    print(f"\nabstracts the strict stated-only rule kept and passed_strict drops: {len(lost):,}")
     print(f"  of those, median implicit failures: {lost.failed_implicit.median():.0f}")
 
-    c, e = int(d.keep_norel_dynamic.sum()), int(d.keep_norel_dyn_stated.sum())
-    print(f"kept, NoRelation aware, dynamic (full)   : {c:,} ({c/len(d)*100:.1f}%)")
-    print(f"kept, NoRelation aware, dynamic (stated) : {e:,} ({e/len(d)*100:.1f}%)")
+    strict = write_filtered(d, "passed_strict", OUT)
+    dyn = write_filtered(d, "passed", OUT_DYN)
 
-    lines = write_filtered(d, "keep_norel_aware", OUT)
-    print("\nstrict rule -> filtered_norel/")
-    print("| model | split | abstracts | kept, stated only | kept, NoRelation aware | papers |")
+    print("\n| model | split | abstracts | passed_strict | passed (dynamic) | papers, dynamic |")
     print("|---|---|---|---|---|---|")
-    for l in lines:
-        print(l)
-
-    dyn = write_filtered(d, "keep_norel_dynamic", OUT_DYN, before_col="keep_norel_aware")
-    print("\ndynamic rule -> filtered_norel_dynamic/")
-    print("| model | split | abstracts | kept, strict | kept, dynamic | papers |")
-    print("|---|---|---|---|---|---|")
-    for l in dyn:
-        print(l)
+    for key in sorted(dyn):
+        total, n_dyn, pap_dyn, pap_all = dyn[key]
+        _, n_str, _, _ = strict[key]
+        print(f"| {key[0]} | {key[1]} | {total} | {n_str} ({n_str/total*100:.1f}%) | "
+              f"{n_dyn} ({n_dyn/total*100:.1f}%) | {pap_dyn} / {pap_all} |")
 
     d.to_csv(HERE / "abstract_decisions_norel.csv", index=False)
     print(f"\nwritten: {OUT}/, {OUT_DYN}/ and abstract_decisions_norel.csv")

@@ -87,6 +87,27 @@ an unscoreable claim reject an otherwise sound abstract seemed worse than
 ignoring it, so those claims are not counted as errors. This is a judgement call
 and Fred has been asked to confirm it.
 
+## The NoRelation-aware sets, added later
+
+This folder and everything above it judges only the relations each generation prompt
+lists. Every co-mentioned entity pair the prompt leaves out is implicitly a NoRelation
+claim, and none of those were scored, so the filter could not catch a relation the
+generator invented. Frederik asked for that gap to be closed at meeting 10. Two more
+folders came out of it, both built by `filter_norel_aware.py` from
+`abstract_decisions_norel.csv`:
+
+| folder | column | rule | claims judged | abstracts |
+|---|---|---|---|---|
+| `filtered/` | `passed` in `abstract_decisions.csv` | dynamic | stated | 1,307 |
+| `filtered_norel_dynamic/` | `passed` in `abstract_decisions_norel.csv` | dynamic | stated + implicit | 779 |
+| `filtered_norel/` | `passed_strict` | strict | stated + implicit | 615 |
+
+`filtered_norel_dynamic/` is the one to compare against `filtered/`, because it is the
+same rule on more claims. `filtered_norel/` is stricter on both axes at once.
+
+**`passed` means 1,307 in one CSV and 779 in the other.** Same rule, different claim set.
+Never quote it without naming the file.
+
 ## Rebuilding it differently
 
 The scoring and the decision are separate steps on purpose. Scoring cost 38
