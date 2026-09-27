@@ -205,12 +205,13 @@ def main():
         b = binned(sub.n_relations, sub.error_rate, rel_edges)
         lo, hi = len_r[lab]
         axes[0].plot(b.centre, b["mean"], marker="o", markersize=4, color=colour,
-                     label=f"abstracts of {lo} to {hi} words")
+                     label=f"{lo}-{hi}")
         swings.append(swing(sub, "n_relations", rel_edges))
     axes[0].set_xlim(0, float(np.quantile(abs_df.n_relations, 0.98)) * 1.03)
-    axes[0].set_xlabel("x axis: relations asserted in the abstract")
+    axes[0].set_xlabel("relations in the abstract")
     axes[0].set_ylabel("rejection rate")
-    titles = [f"Relation count varied, length fixed: {min(swings):+.2f} to {max(swings):+.2f}"]
+    titles = ["abstract length (words)"]
+    rise = [f"{min(swings):+.2f} to {max(swings):+.2f}"]
 
     swings = []
     for lab, colour in zip(["few", "medium", "many"], colours):
@@ -218,18 +219,23 @@ def main():
         b = binned(sub.abstract_words, sub.error_rate, len_edges)
         lo, hi = rel_r[lab]
         axes[1].plot(b.centre, b["mean"], marker="o", markersize=4, color=colour,
-                     label=f"abstracts with {lo} to {hi} relations")
+                     label=f"{lo}-{hi}")
         swings.append(swing(sub, "abstract_words", len_edges))
     axes[1].set_xlim(float(np.quantile(abs_df.abstract_words, 0.01)) * 0.95,
                      float(np.quantile(abs_df.abstract_words, 0.99)) * 1.03)
-    axes[1].set_xlabel("x axis: abstract length in words")
-    titles.append(f"Length varied, relation count fixed: {min(swings):+.2f} to {max(swings):+.2f}")
+    axes[1].set_xlabel("abstract length (words)")
+    titles.append("relations in the abstract")
+    rise.append(f"{min(swings):+.2f} to {max(swings):+.2f}")
 
-    # The panel title doubles as the legend heading, so the figure needs no title row.
+    axes[0].set_title(f"Relation count varied, length held fixed: {rise[0]}", fontsize=8.5)
+    axes[1].set_title(f"Length varied, relation count held fixed: {rise[1]}", fontsize=8.5)
     for ax, title in zip(axes, titles):
         ax.set_ylim(0, 0.55)
         ax.legend(frameon=False, fontsize=8, loc="lower right", title=title,
-                  title_fontsize=9, alignment="right")
+                  title_fontsize=9, alignment="right", ncol=3, columnspacing=1.2,
+                  handlelength=1.6)
+        ax.grid(True, color="#dddddd", linewidth=0.6)
+        ax.set_axisbelow(True)
         ax.spines[["top", "right"]].set_visible(False)
     fig.tight_layout()
     fig.savefig(FIG_DIR / "error_rate_disentangled.png", dpi=200,
