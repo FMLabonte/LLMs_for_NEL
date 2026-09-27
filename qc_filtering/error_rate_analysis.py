@@ -197,7 +197,7 @@ def main():
         b = binned(sub[xcol], sub.error_rate, edges)
         return b["mean"].iloc[-1] - b["mean"].iloc[0] if len(b) > 1 else float("nan")
 
-    fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.6), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(11.5, 3.3), sharey=True)
 
     swings = []
     for lab, colour in zip(["short", "medium", "long"], colours):
@@ -209,10 +209,8 @@ def main():
         swings.append(swing(sub, "n_relations", rel_edges))
     axes[0].set_xlim(0, float(np.quantile(abs_df.n_relations, 0.98)) * 1.03)
     axes[0].set_xlabel("x axis: relations asserted in the abstract")
-    axes[0].set_ylabel("errors / relations")
-    axes[0].set_title("Vary the relation count, hold length fixed\n"
-                      f"every band climbs, by {min(swings):+.2f} to {max(swings):+.2f}",
-                      fontsize=10)
+    axes[0].set_ylabel("rejection rate")
+    titles = [f"Relation count varied, length fixed: {min(swings):+.2f} to {max(swings):+.2f}"]
 
     swings = []
     for lab, colour in zip(["few", "medium", "many"], colours):
@@ -225,16 +223,14 @@ def main():
     axes[1].set_xlim(float(np.quantile(abs_df.abstract_words, 0.01)) * 0.95,
                      float(np.quantile(abs_df.abstract_words, 0.99)) * 1.03)
     axes[1].set_xlabel("x axis: abstract length in words")
-    axes[1].set_title("Vary the length, hold relation count fixed\n"
-                      f"every band is near flat, {min(swings):+.2f} to {max(swings):+.2f}",
-                      fontsize=10)
+    titles.append(f"Length varied, relation count fixed: {min(swings):+.2f} to {max(swings):+.2f}")
 
-    for ax in axes:
-        ax.set_ylim(0, 0.75)
-        ax.legend(frameon=False, fontsize=8, loc="upper left")
+    # The panel title doubles as the legend heading, so the figure needs no title row.
+    for ax, title in zip(axes, titles):
+        ax.set_ylim(0, 0.55)
+        ax.legend(frameon=False, fontsize=8, loc="lower right", title=title,
+                  title_fontsize=9, alignment="right")
         ax.spines[["top", "right"]].set_visible(False)
-    fig.suptitle("The driver is the relation count, not the length",
-                 fontsize=12, fontweight="bold", y=1.0)
     fig.tight_layout()
     fig.savefig(FIG_DIR / "error_rate_disentangled.png", dpi=200,
                 bbox_inches="tight")
