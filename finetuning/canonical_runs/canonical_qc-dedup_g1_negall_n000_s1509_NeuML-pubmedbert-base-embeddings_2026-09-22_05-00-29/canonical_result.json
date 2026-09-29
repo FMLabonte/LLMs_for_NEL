@@ -1,0 +1,46 @@
+{
+  "condition": "qc-dedup",
+  "source": "synth8b",
+  "qc_arm": "dedup",
+  "swap_n": null,
+  "acceptance_level": null,
+  "acceptance_arm": null,
+  "model": "NeuML/pubmedbert-base-embeddings",
+  "generations": 1,
+  "neg_ratio": "all",
+  "dev_source": "synth8b",
+  "n_papers": 0,
+  "seed": 42,
+  "run_seed": 1509,
+  "seeded_init": true,
+  "epochs": 5,
+  "selected_pmids": [],
+  "run_dir": "/home/chris/git/LLMs_for_NEL/finetuning/canonical_runs/canonical_qc-dedup_g1_negall_n000_s1509_NeuML-pubmedbert-base-embeddings_2026-09-22_05-00-29",
+  "dev_selected_epoch": 5,
+  "dev_selected_checkpoint": "checkpoint-3815",
+  "per_epoch": [
+    {
+      "epoch": 5,
+      "checkpoint": "checkpoint-3815",
+      "dev_f1_micro": 0.9051667756703728,
+      "matched": {
+        "rows": 2326,
+        "biored_f1": 0.35574572127139364,
+        "biored_precision": 0.6152219873150105,
+        "biored_recall": 0.25021496130696474,
+        "tp": 291,
+        "fp": 182,
+        "fn": 872
+      },
+      "all_pairs": {
+        "rows": 10097,
+        "biored_f1": 0.2972420837589376,
+        "biored_precision": 0.3660377358490566,
+        "biored_recall": 0.25021496130696474,
+        "tp": 291,
+        "fp": 504,
+        "fn": 872
+      }
+    }
+  ]
+}

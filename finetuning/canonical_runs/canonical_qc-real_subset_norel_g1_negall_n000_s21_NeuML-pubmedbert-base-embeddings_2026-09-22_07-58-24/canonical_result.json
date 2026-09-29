@@ -1,0 +1,46 @@
+{
+  "condition": "qc-real_subset_norel",
+  "source": "synth8b",
+  "qc_arm": "real_subset_norel",
+  "swap_n": null,
+  "acceptance_level": null,
+  "acceptance_arm": null,
+  "model": "NeuML/pubmedbert-base-embeddings",
+  "generations": 1,
+  "neg_ratio": "all",
+  "dev_source": "biored",
+  "n_papers": 0,
+  "seed": 42,
+  "run_seed": 21,
+  "seeded_init": true,
+  "epochs": 5,
+  "selected_pmids": [],
+  "run_dir": "/home/chris/git/LLMs_for_NEL/finetuning/canonical_runs/canonical_qc-real_subset_norel_g1_negall_n000_s21_NeuML-pubmedbert-base-embeddings_2026-09-22_07-58-24",
+  "dev_selected_epoch": 2,
+  "dev_selected_checkpoint": "checkpoint-594",
+  "per_epoch": [
+    {
+      "epoch": 2,
+      "checkpoint": "checkpoint-594",
+      "dev_f1_micro": 0.8745037494486105,
+      "matched": {
+        "rows": 2326,
+        "biored_f1": 0.2759084791386272,
+        "biored_precision": 0.6346749226006192,
+        "biored_recall": 0.176268271711092,
+        "tp": 205,
+        "fp": 118,
+        "fn": 958
+      },
+      "all_pairs": {
+        "rows": 10097,
+        "biored_f1": 0.24260355029585798,
+        "biored_precision": 0.3889943074003795,
+        "biored_recall": 0.176268271711092,
+        "tp": 205,
+        "fp": 322,
+        "fn": 958
+      }
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "condition": "qc-random212",
+  "source": "synth8b",
+  "qc_arm": "random212",
+  "swap_n": null,
+  "acceptance_level": null,
+  "acceptance_arm": null,
+  "model": "NeuML/pubmedbert-base-embeddings",
+  "generations": 1,
+  "neg_ratio": "1",
+  "dev_source": "synth8b",
+  "n_papers": 0,
+  "seed": 42,
+  "run_seed": 16,
+  "seeded_init": true,
+  "epochs": 5,
+  "selected_pmids": [],
+  "run_dir": "/home/julian/chris/LLMs_for_NEL/finetuning/canonical_runs/canonical_qc-random212_g1_neg1_n000_s16_NeuML-pubmedbert-base-embeddings_2026-09-14_23-24-18",
+  "dev_selected_epoch": 4,
+  "dev_selected_checkpoint": "checkpoint-1160",
+  "per_epoch": [
+    {
+      "epoch": 4,
+      "checkpoint": "checkpoint-1160",
+      "dev_f1_micro": 0.8282122905027933,
+      "matched": {
+        "rows": 2326,
+        "biored_f1": 0.30661577608142493,
+        "biored_precision": 0.589242053789731,
+        "biored_recall": 0.20722269991401548,
+        "tp": 241,
+        "fp": 168,
+        "fn": 922
+      },
+      "all_pairs": {
+        "rows": 10097,
+        "biored_f1": 0.27231638418079096,
+        "biored_precision": 0.3970345963756178,
+        "biored_recall": 0.20722269991401548,
+        "tp": 241,
+        "fp": 366,
+        "fn": 922
+      }
+    }
+  ]
+}

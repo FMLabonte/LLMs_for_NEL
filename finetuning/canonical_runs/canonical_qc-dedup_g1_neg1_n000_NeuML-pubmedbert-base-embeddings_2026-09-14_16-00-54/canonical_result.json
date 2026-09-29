@@ -1,0 +1,137 @@
+{
+  "condition": "qc-dedup",
+  "source": "synth8b",
+  "qc_arm": "dedup",
+  "swap_n": null,
+  "acceptance_level": null,
+  "acceptance_arm": null,
+  "model": "NeuML/pubmedbert-base-embeddings",
+  "generations": 1,
+  "neg_ratio": "1",
+  "dev_source": "synth8b",
+  "n_papers": 0,
+  "seed": 42,
+  "seeded_init": true,
+  "epochs": 5,
+  "selected_pmids": [],
+  "run_dir": "/home/chris/git/LLMs_for_NEL/finetuning/canonical_runs/canonical_qc-dedup_g1_neg1_n000_NeuML-pubmedbert-base-embeddings_2026-09-14_16-00-54",
+  "dev_selected_epoch": 5,
+  "dev_selected_checkpoint": "checkpoint-1060",
+  "per_epoch": [
+    {
+      "epoch": 1,
+      "checkpoint": "checkpoint-212",
+      "dev_f1_micro": 0.510989010989011,
+      "matched": {
+        "rows": 2326,
+        "biored_f1": 0.001718213058419244,
+        "biored_precision": 1.0,
+        "biored_recall": 0.0008598452278589854,
+        "tp": 1,
+        "fp": 0,
+        "fn": 1162
+      },
+      "all_pairs": {
+        "rows": 10097,
+        "biored_f1": 0.001718213058419244,
+        "biored_precision": 1.0,
+        "biored_recall": 0.0008598452278589854,
+        "tp": 1,
+        "fp": 0,
+        "fn": 1162
+      }
+    },
+    {
+      "epoch": 2,
+      "checkpoint": "checkpoint-424",
+      "dev_f1_micro": 0.7774725274725275,
+      "matched": {
+        "rows": 2326,
+        "biored_f1": 0.25943084050297816,
+        "biored_precision": 0.5632183908045977,
+        "biored_recall": 0.16852966466036112,
+        "tp": 196,
+        "fp": 152,
+        "fn": 967
+      },
+      "all_pairs": {
+        "rows": 10097,
+        "biored_f1": 0.21269669017905585,
+        "biored_precision": 0.28823529411764703,
+        "biored_recall": 0.16852966466036112,
+        "tp": 196,
+        "fp": 484,
+        "fn": 967
+      }
+    },
+    {
+      "epoch": 3,
+      "checkpoint": "checkpoint-636",
+      "dev_f1_micro": 0.8159340659340659,
+      "matched": {
+        "rows": 2326,
+        "biored_f1": 0.392,
+        "biored_precision": 0.5843270868824532,
+        "biored_recall": 0.29492691315563196,
+        "tp": 343,
+        "fp": 244,
+        "fn": 820
+      },
+      "all_pairs": {
+        "rows": 10097,
+        "biored_f1": 0.2927870251813913,
+        "biored_precision": 0.29067796610169494,
+        "biored_recall": 0.29492691315563196,
+        "tp": 343,
+        "fp": 837,
+        "fn": 820
+      }
+    },
+    {
+      "epoch": 4,
+      "checkpoint": "checkpoint-848",
+      "dev_f1_micro": 0.8269230769230769,
+      "matched": {
+        "rows": 2326,
+        "biored_f1": 0.3606755126658625,
+        "biored_precision": 0.604040404040404,
+        "biored_recall": 0.25709372312983664,
+        "tp": 299,
+        "fp": 196,
+        "fn": 864
+      },
+      "all_pairs": {
+        "rows": 10097,
+        "biored_f1": 0.28653569717297556,
+        "biored_precision": 0.3235930735930736,
+        "biored_recall": 0.25709372312983664,
+        "tp": 299,
+        "fp": 625,
+        "fn": 864
+      }
+    },
+    {
+      "epoch": 5,
+      "checkpoint": "checkpoint-1060",
+      "dev_f1_micro": 0.8406593406593407,
+      "matched": {
+        "rows": 2326,
+        "biored_f1": 0.2991618310767247,
+        "biored_precision": 0.5979381443298969,
+        "biored_recall": 0.1994840928632846,
+        "tp": 232,
+        "fp": 156,
+        "fn": 931
+      },
+      "all_pairs": {
+        "rows": 10097,
+        "biored_f1": 0.2603815937149271,
+        "biored_precision": 0.37479806138933763,
+        "biored_recall": 0.1994840928632846,
+        "tp": 232,
+        "fp": 387,
+        "fn": 931
+      }
+    }
+  ]
+}
