@@ -197,7 +197,7 @@ def main():
         b = binned(sub[xcol], sub.error_rate, edges)
         return b["mean"].iloc[-1] - b["mean"].iloc[0] if len(b) > 1 else float("nan")
 
-    fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.6), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(11.5, 3.3), sharey=True)
 
     swings = []
     for lab, colour in zip(["short", "medium", "long"], colours):
@@ -205,14 +205,13 @@ def main():
         b = binned(sub.n_relations, sub.error_rate, rel_edges)
         lo, hi = len_r[lab]
         axes[0].plot(b.centre, b["mean"], marker="o", markersize=4, color=colour,
-                     label=f"abstracts of {lo} to {hi} words")
+                     label=f"{lo}-{hi}")
         swings.append(swing(sub, "n_relations", rel_edges))
     axes[0].set_xlim(0, float(np.quantile(abs_df.n_relations, 0.98)) * 1.03)
-    axes[0].set_xlabel("x axis: relations asserted in the abstract")
-    axes[0].set_ylabel("errors / relations")
-    axes[0].set_title("Vary the relation count, hold length fixed\n"
-                      f"every band climbs, by {min(swings):+.2f} to {max(swings):+.2f}",
-                      fontsize=10)
+    axes[0].set_xlabel("relations in the abstract")
+    axes[0].set_ylabel("rejection rate")
+    titles = ["abstract length (words)"]
+    rise = [f"{min(swings):+.2f} to {max(swings):+.2f}"]
 
     swings = []
     for lab, colour in zip(["few", "medium", "many"], colours):
@@ -220,21 +219,24 @@ def main():
         b = binned(sub.abstract_words, sub.error_rate, len_edges)
         lo, hi = rel_r[lab]
         axes[1].plot(b.centre, b["mean"], marker="o", markersize=4, color=colour,
-                     label=f"abstracts with {lo} to {hi} relations")
+                     label=f"{lo}-{hi}")
         swings.append(swing(sub, "abstract_words", len_edges))
     axes[1].set_xlim(float(np.quantile(abs_df.abstract_words, 0.01)) * 0.95,
                      float(np.quantile(abs_df.abstract_words, 0.99)) * 1.03)
-    axes[1].set_xlabel("x axis: abstract length in words")
-    axes[1].set_title("Vary the length, hold relation count fixed\n"
-                      f"every band is near flat, {min(swings):+.2f} to {max(swings):+.2f}",
-                      fontsize=10)
+    axes[1].set_xlabel("abstract length (words)")
+    titles.append("relations in the abstract")
+    rise.append(f"{min(swings):+.2f} to {max(swings):+.2f}")
 
-    for ax in axes:
-        ax.set_ylim(0, 0.75)
-        ax.legend(frameon=False, fontsize=8, loc="upper left")
+    axes[0].set_title(f"Relation count varied, length held fixed: {rise[0]}", fontsize=8.5)
+    axes[1].set_title(f"Length varied, relation count held fixed: {rise[1]}", fontsize=8.5)
+    for ax, title in zip(axes, titles):
+        ax.set_ylim(0, 0.55)
+        ax.legend(frameon=False, fontsize=8, loc="lower right", title=title,
+                  title_fontsize=9, alignment="right", ncol=3, columnspacing=1.2,
+                  handlelength=1.6)
+        ax.grid(True, color="#dddddd", linewidth=0.6)
+        ax.set_axisbelow(True)
         ax.spines[["top", "right"]].set_visible(False)
-    fig.suptitle("The driver is the relation count, not the length",
-                 fontsize=12, fontweight="bold", y=1.0)
     fig.tight_layout()
     fig.savefig(FIG_DIR / "error_rate_disentangled.png", dpi=200,
                 bbox_inches="tight")
